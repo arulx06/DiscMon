@@ -77,6 +77,33 @@ async def enqueue_source_job(
     )
 
 
+async def enqueue_discovery_job(
+    session: AsyncSession,
+    source_id: uuid.UUID,
+    *,
+    idempotency_key: str,
+    available_at: datetime | None = None,
+) -> uuid.UUID | None:
+    active = await session.scalar(
+        select(Job.id)
+        .where(
+            Job.source_id == source_id,
+            Job.kind == JobKind.discover_source,
+            Job.state.in_([JobState.queued, JobState.running, JobState.retry_wait]),
+        )
+        .limit(1)
+    )
+    if active is not None:
+        return None
+    return await enqueue_job(
+        session,
+        JobKind.discover_source,
+        idempotency_key,
+        source_id=source_id,
+        available_at=available_at,
+    )
+
+
 async def claim_job(session: AsyncSession, worker_id: str) -> Job | None:
     now = now_utc()
     job = await session.scalar(

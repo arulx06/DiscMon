@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,6 +34,9 @@ class SyncOutbox(UUIDPrimaryKeyMixin, Base):
 
 class SyncState(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "sync_state"
+    __table_args__ = (
+        UniqueConstraint("sheet_id", "tab", name="uq_sync_state_sheet_tab"),
+    )
 
     sheet_id: Mapped[str] = mapped_column(String(255), nullable=False)
     tab: Mapped[str] = mapped_column(String(120), nullable=False)

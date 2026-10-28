@@ -10,7 +10,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.integrations import router as integration_router
 from app.api.routes import router
+from app.api.webhooks import router as webhook_router
 from app.config import get_settings
 from app.db.session import dispose_engine, engine
 
@@ -38,6 +40,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+app.include_router(webhook_router)
+app.include_router(integration_router)
 app.include_router(router)
 
 

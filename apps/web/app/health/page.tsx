@@ -20,11 +20,12 @@ export default async function HealthPage({
   searchParams: Promise<SearchParams>;
 }) {
   const query = await searchParams;
-  const [status, health, jobs, alerts] = await Promise.all([
+  const [status, health, jobs, alerts, integrations] = await Promise.all([
     api.systemStatus(),
     api.sourceHealth(),
     api.jobs(),
     api.alerts(),
+    api.integrationStatus(),
   ]);
 
   return (
@@ -55,6 +56,74 @@ export default async function HealthPage({
         <div className="stat">
           <strong>{alerts.items.length}</strong>
           <span>Recent alerts</span>
+        </div>
+      </div>
+
+      <h2>Integrations</h2>
+      <div className="grid">
+        <div className="card stack">
+          <div className="actions">
+            <strong>changedetection</strong>
+            <Badge tone={integrations.changedetection.enabled ? "ok" : "warn"}>
+              {integrations.changedetection.enabled ? "Enabled" : "Off"}
+            </Badge>
+          </div>
+          <p className="small muted">
+            Webhook secret{" "}
+            {integrations.changedetection.webhook_configured ? "configured" : "missing"}.
+            Change signals only enqueue a bounded authoritative re-fetch.
+          </p>
+        </div>
+        <div className="card stack">
+          <div className="actions">
+            <strong>Telegram</strong>
+            <Badge tone={integrations.telegram.enabled ? "ok" : "warn"}>
+              {integrations.telegram.enabled ? "Enabled" : "Off"}
+            </Badge>
+          </div>
+          <p className="small muted">
+            Optional delivery channel; every alert remains in the in-app inbox.
+          </p>
+        </div>
+        <div className="card stack">
+          <div className="actions">
+            <strong>Email</strong>
+            <Badge tone={integrations.smtp.enabled ? "ok" : "warn"}>
+              {integrations.smtp.enabled ? "Enabled" : "Off"}
+            </Badge>
+          </div>
+          <p className="small muted">
+            SMTP on port {integrations.smtp.tls_port}; failures stay visible in the
+            in-app inbox.
+          </p>
+        </div>
+        <div className="card stack">
+          <div className="actions">
+            <strong>Google Sheets</strong>
+            <Badge tone={integrations.sheets.enabled ? "ok" : "warn"}>
+              {integrations.sheets.enabled ? "Enabled" : "Off"}
+            </Badge>
+          </div>
+          <p className="small muted">
+            Tab {integrations.sheets.tab};{" "}
+            {integrations.sheets.configured ? "credentials configured" : "credentials missing"}.
+          </p>
+          {integrations.sheets.last_error ? (
+            <p className="small">{integrations.sheets.last_error}</p>
+          ) : null}
+        </div>
+        <div className="card stack">
+          <div className="actions">
+            <strong>Optional AI</strong>
+            <Badge tone={integrations.ai.enabled ? "ok" : "warn"}>
+              {integrations.ai.enabled ? "Enabled" : "Off"}
+            </Badge>
+          </div>
+          <p className="small muted">
+            {integrations.ai.provider
+              ? `Provider ${integrations.ai.provider}; deterministic rules remain authoritative.`
+              : "Rules-only mode; no provider configured."}
+          </p>
         </div>
       </div>
 

@@ -59,10 +59,16 @@ export async function reviewOpportunityAction(form: FormData): Promise<void> {
   const id = text(form, "id");
   const decision = text(form, "decision");
   const note = text(form, "note");
+  const followupRaw = text(form, "followup_due_at");
   await mutation(
     `/opportunities/${id}/review`,
     "POST",
-    { decision, note: note || null },
+    {
+      decision,
+      note: note || null,
+      next_action: text(form, "next_action") || null,
+      followup_due_at: followupRaw ? new Date(followupRaw).toISOString() : null,
+    },
     `/opportunities/${id}`,
     "Review saved",
   );
@@ -164,6 +170,18 @@ export async function createSourceAction(form: FormData): Promise<void> {
 
 export async function updateSourceAction(form: FormData): Promise<void> {
   const id = text(form, "id");
+  let config: unknown = {};
+  const rawConfig = text(form, "config_json");
+  if (rawConfig) {
+    try {
+      config = JSON.parse(rawConfig);
+    } catch {
+      redirect(withMessage(`/sources/${id}`, "Configuration must be valid JSON", true));
+    }
+  }
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    redirect(withMessage(`/sources/${id}`, "Configuration must be a JSON object", true));
+  }
   const body = {
     name: text(form, "name"),
     officialness: text(form, "officialness"),
@@ -172,6 +190,7 @@ export async function updateSourceAction(form: FormData): Promise<void> {
     legal_review_status: text(form, "legal_review_status"),
     interval_hours: numberOrUndefined(form, "interval_hours"),
     schedule_cron: text(form, "schedule_cron") || null,
+    config_json: config,
   };
   await mutation(`/sources/${id}`, "PATCH", body, `/sources/${id}`, "Source updated");
 }
@@ -228,6 +247,36 @@ export async function inspectUrlAction(form: FormData): Promise<void> {
     "/discover",
     "URL added to discovery candidates",
   );
+}
+
+export async function runDiscoveryAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  await mutation(
+    `/discovery/sources/${id}/run`,
+    "POST",
+    {},
+    `/sources/${id}`,
+    "Discovery scan queued",
+  );
+}
+
+export async function promoteDiscoveryAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  let sourceId = "";
+  try {
+    const result = await apiSend<{ source_id: string; created: boolean }>(
+      `/discovery/candidates/${id}/promote`,
+      "POST",
+      {},
+    );
+    sourceId = result.source_id;
+  } catch (failure) {
+    const message =
+      failure instanceof ApiError ? failure.message : "Candidate promotion failed";
+    redirect(withMessage("/discover", message, true));
+  }
+  revalidatePath("/", "layout");
+  redirect(withMessage(`/sources/${sourceId}`, "Source created from candidate; review legal status before enabling"));
 }
 
 export async function decideDiscoveryAction(form: FormData): Promise<void> {

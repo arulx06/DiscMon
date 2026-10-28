@@ -1,10 +1,16 @@
 import Link from "next/link";
 
 import { Badge, EligibilityBadge, IndiaBadge } from "@/components/Badge";
-import { deadlineText, label } from "@/lib/format";
+import { dateLabel, deadlineText, label } from "@/lib/format";
 import type { OpportunityCard as OpportunityCardType } from "@/lib/types";
 
-export function OpportunityCard({ item }: { item: OpportunityCardType }) {
+export function OpportunityCard({
+  item,
+  followupDue,
+}: {
+  item: OpportunityCardType;
+  followupDue?: string | null;
+}) {
   return (
     <article className="card">
       <div className="card-top">
@@ -36,6 +42,15 @@ export function OpportunityCard({ item }: { item: OpportunityCardType }) {
         <span>Deadline: {deadlineText(item)}</span>
         {item.compensation ? <span>{item.compensation}</span> : null}
       </div>
+
+      {item.next_action ? (
+        <p className="small">
+          <strong>Next action:</strong> {item.next_action}
+        </p>
+      ) : null}
+      {followupDue ? (
+        <p className="small muted">Follow-up: {dateLabel(followupDue)}</p>
+      ) : null}
 
       {item.why ? <p className="why">{item.why}</p> : null}
 

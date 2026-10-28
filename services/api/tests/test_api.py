@@ -53,6 +53,11 @@ async def test_api_read_and_review_flow(
     assert ready.status_code == 200
     assert ready.json()["database"] == "ok"
 
+    integrations = await client.get("/v1/integrations/status")
+    assert integrations.status_code == 200
+    assert integrations.json()["sheets"]["tab"] == "Opportunities"
+    assert integrations.json()["ai"]["enabled"] is False
+
     dashboard = await client.get("/v1/dashboard")
     assert dashboard.status_code == 200
     dashboard_body = dashboard.json()
@@ -80,7 +85,12 @@ async def test_api_read_and_review_flow(
 
     review = await client.post(
         f"/v1/opportunities/{opportunity.id}/review",
-        json={"decision": "apply", "note": "Prepare application"},
+        json={
+            "decision": "apply",
+            "note": "Prepare application",
+            "next_action": "Draft application answers",
+            "followup_due_at": "2030-01-15T09:00:00Z",
+        },
     )
     assert review.status_code == 200
     assert review.json()["decision"] == "apply"
@@ -88,6 +98,18 @@ async def test_api_read_and_review_flow(
     refreshed = await client.get(f"/v1/opportunities/{opportunity.id}")
     assert refreshed.json()["user_decision"] == "apply"
     assert refreshed.json()["notes"] == "Prepare application"
+    assert refreshed.json()["next_action"] == "Draft application answers"
+    assert refreshed.json()["followup_due_at"] == "2030-01-15T09:00:00+00:00"
+
+    watchlist = await client.get("/v1/watchlist")
+    assert watchlist.status_code == 200
+    apply_group = next(
+        group for group in watchlist.json()["groups"] if group["key"] == "apply"
+    )
+    assert apply_group["total"] == 1
+    assert apply_group["items"][0]["next_action"] == "Draft application answers"
+    assert apply_group["items"][0]["followup_due_at"] == "2030-01-15T09:00:00+00:00"
+    assert watchlist.json()["followups_due"] == 0
     audit_event = await session.scalar(
         select(AuditEvent).where(AuditEvent.event_type == "opportunity.review")
     )

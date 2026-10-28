@@ -100,6 +100,7 @@ class JobState(StrEnum):
 
 class JobKind(StrEnum):
     ingest_source = "ingest_source"
+    discover_source = "discover_source"
     source_test = "source_test"
     generate_digest = "generate_digest"
     deliver_alert = "deliver_alert"

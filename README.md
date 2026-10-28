@@ -35,6 +35,28 @@ curl http://localhost:8000/health/ready
 Open <http://localhost:3000>. The web container proxies API requests
 server-side; the owner token is never shipped to the browser bundle.
 
+Optional integrations are off by default. To enable Google Sheets, place a
+service-account JSON file at
+`secrets/google-service-account.json` (the whole directory is ignored by Git)
+and set `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SHEETS_TAB` and
+`SHEETS_SYNC_ENABLED=true` in `.env`. Share the target sheet with the service
+account email. Sheets is a mirror; PostgreSQL remains authoritative.
+
+Changedetection is an internal signal source only. Configure
+`CHANGEDETECTION_WEBHOOK_SECRET` and point its webhook at
+`POST /v1/integrations/changedetection/webhook`; a valid signal still triggers
+a bounded re-fetch from the approved source adapter. Telegram and SMTP are
+optional delivery channels; the in-app alert inbox remains available.
+
+## Discovery and integrations
+
+- `/discover` shows candidate sources, approval/rejection and promotion
+  controls. A promoted candidate creates a disabled source for review.
+- Source detail supports JSON configuration editing and, when
+  `config_json.discovery.enabled=true`, a bounded “Scan for links” action.
+- `/health` exposes integration configuration, source health, recent jobs and
+  alerts. Disabled integrations are shown as off, not as successful.
+
 ## Local development
 
 ```powershell

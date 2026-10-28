@@ -25,6 +25,7 @@ export default async function OpportunityDetailPage({
   const query = await searchParams;
   const [item, brief] = await Promise.all([api.opportunity(id), api.brief(id)]);
   const assessment = item.assessment;
+  const followupValue = item.followup_due_at ? item.followup_due_at.slice(0, 16) : "";
 
   return (
     <>
@@ -199,6 +200,23 @@ export default async function OpportunityDetailPage({
                   <option value="ignored">Ignored</option>
                   <option value="completed">Completed</option>
                 </select>
+              </label>
+              <label>
+                Next action
+                <input
+                  name="next_action"
+                  type="text"
+                  defaultValue={item.next_action ?? ""}
+                  placeholder="Draft application, ask for referral..."
+                />
+              </label>
+              <label>
+                Follow-up due
+                <input
+                  name="followup_due_at"
+                  type="datetime-local"
+                  defaultValue={followupValue}
+                />
               </label>
               <label>
                 Note

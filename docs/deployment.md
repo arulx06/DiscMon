@@ -52,8 +52,42 @@ See `.env.example`. Required: `DATABASE_URL`, `SESSION_SECRET`,
 GitHub, changedetection, Telegram, SMTP, Sheets and AI. Core operation never
 requires an AI credential.
 
+The Compose stack mounts `./secrets` read-only at `/secrets` for API, worker
+and scheduler. Keep the directory mode `0700`. To enable Sheets:
+
+1. Create a Google service account and download its JSON key to
+   `secrets/google-service-account.json`.
+2. Share the target spreadsheet with the service-account email.
+3. Set `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SHEETS_TAB=Opportunities` and
+   `SHEETS_SYNC_ENABLED=true`.
+4. Restart API, worker and scheduler and check `/health` integration status.
+
+Sheets failures are recorded in `sync_outbox` and never block ingestion.
+`secrets/*` is ignored by Git; only `secrets/.gitkeep` is tracked.
+
+## Migrations
+
+Always back up first, then run the migration before rolling API/worker/
+scheduler:
+
+```bash
+bash scripts/backup.sh
+docker compose exec api alembic upgrade head
+docker compose exec api alembic check
+```
+
+Current M5/M6 head is `d4a7c1e9f210`. Verify `/health/ready` and a source run
+after upgrading. A clean database migration creates 17 registry candidates and
+zero opportunities when followed by `seed_sources.py`.
+
 ## Optional services
 
 `docker compose --profile changedetection up -d` starts the watcher. It is a
-trusted internal service; its API key stays server-side. RSSHub/Scrapy/
+trusted internal service; its API key stays server-side. Configure the shared
+webhook secret and timestamp tolerance in `.env`; the receiver deduplicates
+body hashes and only enqueues authoritative source re-fetches. RSSHub/Scrapy/
 Playwright are intentionally not part of the MVP Compose stack.
+
+SMTP and Telegram are optional delivery adapters. The in-app alert inbox is
+always the durable record; missing external configuration leaves alerts
+visible instead of silently discarding them.

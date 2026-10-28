@@ -1,6 +1,10 @@
 import { Badge } from "@/components/Badge";
 import { Notice } from "@/components/Notice";
-import { decideDiscoveryAction, inspectUrlAction } from "@/lib/actions";
+import {
+  decideDiscoveryAction,
+  inspectUrlAction,
+  promoteDiscoveryAction,
+} from "@/lib/actions";
 import { api } from "@/lib/api";
 import { dateLabel, label } from "@/lib/format";
 
@@ -100,6 +104,22 @@ export default async function DiscoverPage({
                     </button>
                   </form>
                 </div>
+              ) : null}
+              {candidate.approval_status === "approved" && !candidate.promoted_source_id ? (
+                <div className="actions">
+                  <form action={promoteDiscoveryAction}>
+                    <input type="hidden" name="id" value={candidate.id} />
+                    <button className="primary small" type="submit">
+                      Create source
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+              {candidate.promoted_source_id ? (
+                <p className="small muted">
+                  Source created:{" "}
+                  <a href={`/sources/${candidate.promoted_source_id}`}>open source review</a>
+                </p>
               ) : null}
             </article>
           ))}

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
+from email.utils import formataddr, make_msgid
 
 import httpx
 from sqlalchemy import select
@@ -134,6 +138,26 @@ async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict
             alert.sent_at = now
             sent += 1
             continue
+        if alert.channel in {"email", "smtp"}:
+            if not settings.smtp_enabled:
+                alert.last_error_redacted = (
+                    "SMTP is not configured; alert remains in in-app inbox"
+                )
+                failed += 1
+                continue
+            try:
+                subject, message = _email_text(alert.payload_json)
+                await asyncio.to_thread(_send_smtp, subject, message)
+                alert.status = AlertStatus.sent
+                alert.sent_at = now
+                alert.provider_message_id = make_msgid(domain="discmon.local")
+                sent += 1
+            except Exception:
+                alert.retry_count += 1
+                alert.last_error_redacted = "SMTP delivery failed; see server logs"
+                alert.status = AlertStatus.failed if alert.retry_count >= 4 else AlertStatus.pending
+                failed += 1
+            continue
         if alert.channel == "telegram":
             if not settings.telegram_enabled:
                 alert.last_error_redacted = (
@@ -168,6 +192,45 @@ async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict
         failed += 1
     await session.flush()
     return {"sent": sent, "failed": failed, "processed": len(alerts)}
+
+
+def _send_smtp(subject: str, message: str) -> None:
+    settings = get_settings()
+    if not settings.smtp_host or not settings.smtp_from or not settings.smtp_to:
+        raise RuntimeError("SMTP is not configured")
+    sender = EmailMessage()
+    sender["Subject"] = subject[:180].replace("\r", " ").replace("\n", " ")
+    sender["From"] = formataddr(("DiscMon", settings.smtp_from))
+    sender["To"] = settings.smtp_to
+    sender["Message-ID"] = make_msgid(domain="discmon.local")
+    sender.set_content(message)
+    if settings.smtp_port == 465:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+            if settings.smtp_user:
+                smtp.login(settings.smtp_user, settings.smtp_password or "")
+            smtp.send_message(sender)
+        return
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+        smtp.ehlo()
+        if smtp.has_extn("starttls"):
+            smtp.starttls()
+            smtp.ehlo()
+        if settings.smtp_user:
+            smtp.login(settings.smtp_user, settings.smtp_password or "")
+        smtp.send_message(sender)
+
+
+def _email_text(payload: dict) -> tuple[str, str]:
+    title = str(payload.get("title") or "Opportunity").replace("\r", " ").replace("\n", " ")
+    subject = f"DiscMon alert: {title}"[:180]
+    lines = _telegram_text(payload).splitlines()
+    opportunity_id = payload.get("opportunity_id")
+    if opportunity_id:
+        settings = get_settings()
+        lines.append(
+            f"Open in DiscMon: {settings.app_base_url.rstrip('/')}/opportunities/{opportunity_id}"
+        )
+    return subject, "\n".join(lines)
 
 
 def _telegram_text(payload: dict) -> str:

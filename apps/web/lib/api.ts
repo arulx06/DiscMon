@@ -5,6 +5,7 @@ import type {
   DigestDetail,
   DigestList,
   DiscoveryList,
+  IntegrationStatus,
   JobList,
   OpportunityDetail,
   OpportunityList,
@@ -14,6 +15,7 @@ import type {
   SourceSummary,
   SystemStatus,
   UserProfile,
+  Watchlist,
 } from "./types";
 
 const API_URL = process.env.INTERNAL_API_URL ?? "http://127.0.0.1:8000";
@@ -98,6 +100,7 @@ export async function apiDownload(
 
 export const api = {
   dashboard: () => apiGet<Dashboard>("/dashboard"),
+  watchlist: () => apiGet<Watchlist>("/watchlist"),
   opportunities: (query: Record<string, QueryValue>) =>
     apiGet<OpportunityList>("/opportunities", query),
   opportunity: (id: string) => apiGet<OpportunityDetail>(`/opportunities/${id}`),
@@ -114,6 +117,7 @@ export const api = {
     apiGet<DiscoveryList>("/discovery/candidates", { status }),
   alerts: () => apiGet<AlertList>("/alerts"),
   jobs: () => apiGet<JobList>("/admin/jobs"),
+  integrationStatus: () => apiGet<IntegrationStatus>("/integrations/status"),
   sourceHealth: () => apiGet<SourceHealth>("/health/sources"),
   systemStatus: () => apiGet<SystemStatus>("/system/status"),
 };

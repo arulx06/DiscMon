@@ -145,6 +145,7 @@ class Opportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         enum_column(UserDecision), default=UserDecision.unreviewed, nullable=False
     )
     owner_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_fixture: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 

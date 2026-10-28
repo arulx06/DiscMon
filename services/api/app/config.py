@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     smtp_to: str | None = None
 
     google_sheets_spreadsheet_id: str | None = None
+    google_sheets_tab: str = "Opportunities"
     google_service_account_json_path: str | None = None
     sheets_sync_enabled: bool = False
 
@@ -94,6 +95,12 @@ class Settings(BaseSettings):
     @property
     def smtp_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from and self.smtp_to)
+
+    @property
+    def sheets_configured(self) -> bool:
+        return bool(
+            self.google_sheets_spreadsheet_id and self.google_service_account_json_path
+        )
 
 
 @lru_cache

@@ -15,6 +15,7 @@ from app.db.models.review import Review
 from app.db.models.source import Source, SourceRun
 from app.db.models.sync import SyncOutbox, SyncState
 from app.db.models.user import UserProfile
+from app.db.models.webhook import WebhookEvent
 
 __all__ = [
     "Alert",
@@ -34,4 +35,5 @@ __all__ = [
     "SyncOutbox",
     "SyncState",
     "UserProfile",
+    "WebhookEvent",
 ]

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
 
+from app.config import get_settings
 from app.db.models.enums import (
     ApprovalStatus,
     HealthStatus,
@@ -17,7 +18,13 @@ from app.db.models.enums import (
 from app.db.models.source import Source
 from app.db.session import async_session_factory
 from app.runtime import run
-from app.services.queue import enqueue_job, enqueue_source_job, recover_expired_jobs
+from app.services.discovery import discovery_enabled
+from app.services.queue import (
+    enqueue_discovery_job,
+    enqueue_job,
+    enqueue_source_job,
+    recover_expired_jobs,
+)
 from app.services.time import now_utc
 
 _running = True
@@ -73,6 +80,41 @@ async def schedule_once() -> dict:
             available_at=now,
         )
         local = now.astimezone(IST)
+        discovery_jobs: list[str] = []
+        if local.weekday() == 0 and local.hour >= 9:
+            discovery_sources = (
+                (
+                    await session.execute(
+                        select(Source).where(
+                            Source.enabled.is_(True),
+                            Source.approval_status == ApprovalStatus.approved,
+                            Source.legal_review_status == LegalReviewStatus.approved,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for source in discovery_sources:
+                if not discovery_enabled(source):
+                    continue
+                discovery_job = await enqueue_discovery_job(
+                    session,
+                    source.id,
+                    idempotency_key=f"discover:weekly:{source.id}:{local.strftime('%G-W%V')}",
+                    available_at=now,
+                )
+                if discovery_job is not None:
+                    discovery_jobs.append(str(discovery_job))
+        sheets_job = None
+        if get_settings().sheets_sync_enabled:
+            bucket = f"{now.strftime('%Y%m%d%H')}{now.minute // 15}"
+            sheets_job = await enqueue_job(
+                session,
+                JobKind.sheets_sync,
+                f"sheets-sync:{bucket}",
+                available_at=now,
+            )
         digest_jobs: list[str] = []
         if (local.hour, local.minute) >= (8, 30):
             daily_job = await enqueue_job(
@@ -96,6 +138,8 @@ async def schedule_once() -> dict:
     return {
         "queued_sources": queued_sources,
         "alert_job": str(alert_job) if alert_job else None,
+        "discovery_jobs": discovery_jobs,
+        "sheets_job": str(sheets_job) if sheets_job else None,
         "digest_jobs": digest_jobs,
     }
 

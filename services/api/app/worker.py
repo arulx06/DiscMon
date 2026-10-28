@@ -59,6 +59,35 @@ async def process_job(job: Job) -> None:
                 flush=True,
             )
         return
+    if job.kind == JobKind.discover_source:
+        if job.source_id is None:
+            raise ValueError("discover_source job has no source_id")
+        from app.services.discovery import run_discovery
+
+        async with async_session_factory() as session:
+            discovery_outcome = await run_discovery(session, job.source_id)
+            await session.commit()
+            print(
+                json.dumps(
+                    {
+                        "event": "source_discovery",
+                        "source_id": str(job.source_id),
+                        "links_seen": discovery_outcome.links_seen,
+                        "created": discovery_outcome.created,
+                        "skipped_known": discovery_outcome.skipped_known,
+                    }
+                ),
+                flush=True,
+            )
+        return
+    if job.kind == JobKind.sheets_sync:
+        from app.services.sheets import process_sheets_outbox
+
+        async with async_session_factory() as session:
+            result = await process_sheets_outbox(session)
+            await session.commit()
+            print(json.dumps({"event": "sheets_sync", **result}), flush=True)
+        return
     if job.kind == JobKind.deliver_alert:
         from app.services.alerts import deliver_pending_alerts
 

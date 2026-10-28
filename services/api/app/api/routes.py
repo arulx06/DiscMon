@@ -51,6 +51,7 @@ from app.services.digests import (
     current_brief_markdown,
     generate_digest,
 )
+from app.services.discovery import discovery_enabled, promote_candidate
 from app.services.exports import (
     analysis_brief,
     export_row,
@@ -58,6 +59,7 @@ from app.services.exports import (
     opportunities_ics,
 )
 from app.services.queue import enqueue_job, enqueue_source_job, queued_depth
+from app.services.sheets import enqueue_sheet_upsert
 from app.services.time import days_until, now_utc
 from app.services.urls import canonicalize_url, domain_of, is_http_url
 
@@ -289,6 +291,79 @@ async def list_opportunities(
     }
 
 
+WATCHLIST_GROUPS = [
+    ("watch", "Watch", [UserDecision.watch]),
+    ("prepare", "Prepare", [UserDecision.prepare]),
+    ("research", "Research", [UserDecision.research]),
+    ("apply", "Ready to apply", [UserDecision.apply]),
+    ("applied", "Applied or interviewing", [UserDecision.applied, UserDecision.interviewing]),
+    (
+        "archive",
+        "Archive",
+        [UserDecision.ignored, UserDecision.completed, UserDecision.rejected],
+    ),
+]
+
+
+@router.get("/watchlist")
+async def watchlist(session: AsyncSession = Depends(get_db)) -> dict:
+    decisions = [decision for _, _, values in WATCHLIST_GROUPS for decision in values]
+    latest = _latest_assessment_id()
+    rows = (
+        await session.execute(
+            select(Opportunity, Organization, Assessment)
+            .outerjoin(Organization, Organization.id == Opportunity.organization_id)
+            .outerjoin(Assessment, Assessment.id == latest)
+            .where(Opportunity.user_decision.in_(decisions))
+        )
+    ).all()
+    ids = [opportunity.id for opportunity, _, _ in rows]
+    latest_reviews: dict[uuid.UUID, Review] = {}
+    if ids:
+        reviews = (
+            (
+                await session.execute(
+                    select(Review)
+                    .where(Review.opportunity_id.in_(ids))
+                    .order_by(Review.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for review in reviews:
+            latest_reviews.setdefault(review.opportunity_id, review)
+    now = now_utc()
+    grouped: dict[str, list[dict]] = {key: [] for key, _, _ in WATCHLIST_GROUPS}
+    group_by_decision = {
+        decision: key
+        for key, _, decisions_group in WATCHLIST_GROUPS
+        for decision in decisions_group
+    }
+    followups_due = 0
+    for opportunity, organization, assessment in rows:
+        latest_review = latest_reviews.get(opportunity.id)
+        followup = latest_review.followup_due_at if latest_review else None
+        if followup is not None and followup <= now:
+            followups_due += 1
+        item = opportunity_card(opportunity, organization, assessment)
+        item["followup_due_at"] = jsonable(followup)
+        item["followup_is_due"] = bool(followup is not None and followup <= now)
+        grouped[group_by_decision[opportunity.user_decision]].append(item)
+    groups = []
+    for key, title, _ in WATCHLIST_GROUPS:
+        items = grouped[key]
+        items.sort(
+            key=lambda item: (
+                item["followup_due_at"] is None,
+                item["followup_due_at"] or "",
+                -(item["score"] or 0),
+            )
+        )
+        groups.append({"key": key, "title": title, "items": items, "total": len(items)})
+    return {"groups": groups, "followups_due": followups_due}
+
+
 @router.get("/opportunities/{opportunity_id}")
 async def get_opportunity(
     opportunity_id: uuid.UUID,
@@ -337,6 +412,12 @@ async def get_opportunity(
         )
         .scalars()
         .all()
+    )
+    latest_review = await session.scalar(
+        select(Review)
+        .where(Review.opportunity_id == opportunity.id)
+        .order_by(Review.created_at.desc())
+        .limit(1)
     )
     return {
         **opportunity_card(opportunity, organization, assessment),
@@ -406,12 +487,15 @@ async def get_opportunity(
             for alert in alerts
         ],
         "notes": opportunity.owner_notes,
+        "next_action": opportunity.next_action,
+        "followup_due_at": jsonable(latest_review.followup_due_at if latest_review else None),
     }
 
 
 class ReviewRequest(BaseModel):
     decision: UserDecision
     note: str | None = Field(default=None, max_length=4000)
+    next_action: str | None = Field(default=None, max_length=1000)
     followup_due_at: datetime | None = None
 
 
@@ -525,6 +609,9 @@ async def review_opportunity(
     opportunity.user_decision = body.decision
     if body.note is not None:
         opportunity.owner_notes = body.note
+    if body.next_action is not None:
+        opportunity.next_action = body.next_action.strip() or None
+    await enqueue_sheet_upsert(session, opportunity.id)
     session.add(
         AuditEvent(
             actor="owner",
@@ -532,7 +619,11 @@ async def review_opportunity(
             entity_type="opportunity",
             entity_id=opportunity.id,
             before_json={"decision": before},
-            after_json={"decision": body.decision.value},
+            after_json={
+                "decision": body.decision.value,
+                "has_next_action": bool(opportunity.next_action),
+                "followup_due_at": jsonable(body.followup_due_at),
+            },
         )
     )
     await session.commit()
@@ -1272,6 +1363,49 @@ async def list_audit(
     }
 
 
+@router.post("/discovery/sources/{source_id}/run", status_code=202)
+async def run_source_discovery(
+    source_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    source = await session.get(Source, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    if not source.enabled:
+        raise HTTPException(status_code=400, detail="Source is disabled")
+    if not discovery_enabled(source):
+        raise HTTPException(status_code=400, detail="Discovery is not enabled for this source")
+    active = await session.scalar(
+        select(Job.id)
+        .where(
+            Job.source_id == source.id,
+            Job.kind == JobKind.discover_source,
+            Job.state.in_([JobState.queued, JobState.running, JobState.retry_wait]),
+        )
+        .limit(1)
+    )
+    if active is not None:
+        raise HTTPException(status_code=409, detail="A discovery scan is already queued or running")
+    stamp = now_utc().strftime("%Y%m%d%H%M%S")
+    job_id = await enqueue_job(
+        session,
+        JobKind.discover_source,
+        f"discover:{source.id}:{stamp}",
+        source_id=source.id,
+    )
+    session.add(
+        AuditEvent(
+            actor="owner",
+            event_type="discovery.run_queued",
+            entity_type="source",
+            entity_id=source.id,
+            after_json={"job_id": str(job_id)},
+        )
+    )
+    await session.commit()
+    return {"job_id": str(job_id), "source_id": str(source.id)}
+
+
 @router.get("/discovery/candidates")
 async def list_discovery_candidates(
     session: AsyncSession = Depends(get_db),
@@ -1295,6 +1429,11 @@ async def list_discovery_candidates(
                 "officialness_guess": candidate.officialness_guess.value,
                 "approval_status": candidate.approval_status.value,
                 "legal_review_status": candidate.legal_review_status.value,
+                "promoted_source_id": (
+                    str(candidate.promoted_source_id)
+                    if candidate.promoted_source_id
+                    else None
+                ),
                 "notes": candidate.notes,
             }
             for candidate in candidates
@@ -1332,6 +1471,41 @@ async def decide_discovery_candidate(
     return {
         "id": str(candidate.id),
         "approval_status": candidate.approval_status.value,
+    }
+
+
+@router.post("/discovery/candidates/{candidate_id}/promote", status_code=201)
+async def promote_discovery_candidate(
+    candidate_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    candidate = await session.get(DiscoveryCandidate, candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Discovery candidate not found")
+    await _validate_source_root(candidate.candidate_url)
+    try:
+        source, created = await promote_candidate(session, candidate.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.add(
+        AuditEvent(
+            actor="owner",
+            event_type="discovery.promoted",
+            entity_type="source",
+            entity_id=source.id,
+            after_json={
+                "candidate_id": str(candidate.id),
+                "created": created,
+                "root_url": source.root_url,
+            },
+        )
+    )
+    await session.commit()
+    return {
+        "candidate_id": str(candidate.id),
+        "source_id": str(source.id),
+        "created": created,
+        "source": _source_summary(source),
     }
 
 

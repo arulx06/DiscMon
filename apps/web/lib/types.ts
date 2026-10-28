@@ -40,6 +40,7 @@ export interface OpportunityCard {
   is_fixture: boolean;
   why: string | null;
   hard_gate: string | null;
+  next_action: string | null;
 }
 
 export interface Assessment {
@@ -96,6 +97,24 @@ export interface OpportunityDetail extends OpportunityCard {
   sources: OpportunitySourceLink[];
   alerts: OpportunityAlert[];
   notes: string | null;
+  followup_due_at: string | null;
+}
+
+export interface WatchlistItem extends OpportunityCard {
+  followup_due_at: string | null;
+  followup_is_due: boolean;
+}
+
+export interface WatchlistGroup {
+  key: string;
+  title: string;
+  items: WatchlistItem[];
+  total: number;
+}
+
+export interface Watchlist {
+  groups: WatchlistGroup[];
+  followups_due: number;
 }
 
 export interface OpportunityList {
@@ -236,11 +255,31 @@ export interface DiscoveryCandidate {
   officialness_guess: string;
   approval_status: string;
   legal_review_status: string;
+  promoted_source_id: string | null;
   notes: string | null;
 }
 
 export interface DiscoveryList {
   items: DiscoveryCandidate[];
+}
+
+export interface IntegrationStatus {
+  changedetection: {
+    enabled: boolean;
+    base_url_configured: boolean;
+    webhook_configured: boolean;
+  };
+  telegram: { enabled: boolean };
+  smtp: { enabled: boolean; host_configured: boolean; tls_port: number };
+  sheets: {
+    enabled: boolean;
+    configured: boolean;
+    tab: string;
+    counts: Record<string, number>;
+    last_success_at: string | null;
+    last_error: string | null;
+  };
+  ai: { enabled: boolean; provider: string | null };
 }
 
 export interface AlertItem {

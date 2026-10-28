@@ -52,4 +52,5 @@ def opportunity_card(
         "is_fixture": opportunity.is_fixture,
         "why": assessment.recommendation_reason if assessment else None,
         "hard_gate": assessment.hard_gate_status.value if assessment else None,
+        "next_action": opportunity.next_action,
     }

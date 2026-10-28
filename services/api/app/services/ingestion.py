@@ -36,6 +36,7 @@ from app.services.revisions import (
     material_snapshot,
     snapshot_hash,
 )
+from app.services.sheets import enqueue_sheet_upsert
 from app.services.time import deadline_state, ensure_utc, now_utc
 from app.services.urls import canonicalize_url, is_http_url
 
@@ -156,8 +157,13 @@ def _apply_candidate(
         opportunity.deadline_timezone = candidate.deadline_timezone
         opportunity.deadline_precision = candidate.deadline_precision
     opportunity.compensation_summary = candidate.compensation.summary
-    if candidate.compensation.model_dump(exclude_none=True):
-        opportunity.monetary_value_json = candidate.compensation.model_dump(exclude_none=True)
+    compensation = candidate.compensation.model_dump(exclude_none=True)
+    if compensation:
+        semantic = {key: value for key, value in compensation.items() if key != "raw"}
+        current = opportunity.monetary_value_json or {}
+        current_semantic = {key: value for key, value in current.items() if key != "raw"}
+        if semantic != current_semantic:
+            opportunity.monetary_value_json = compensation
     opportunity.professional_eligibility = eligibility.professional_eligibility
     opportunity.india_eligibility = eligibility.india_eligibility
     opportunity.student_only = eligibility.student_only
@@ -356,6 +362,8 @@ async def _upsert_candidate(
         await maybe_create_alerts(
             session, opportunity, assessment, revisions[0], profile, organization.canonical_name
         )
+    if revisions or created_now:
+        await enqueue_sheet_upsert(session, opportunity.id)
     if created_now:
         run.records_created += 1
     elif revisions:

@@ -10,6 +10,7 @@ from app.db.models.enums import LifeState, RevisionType
 from app.db.models.evidence import RawEvidence
 from app.db.models.opportunity import Opportunity, OpportunityRevision, OpportunitySource
 from app.db.models.source import SourceRun
+from app.schemas.collector import CompensationDTO
 from app.services import ingestion
 from tests.factories import FakeAdapter, make_candidate, make_source
 
@@ -51,6 +52,34 @@ async def test_ingestion_is_idempotent_and_dedups_alerts(
     assert opportunity.life_state in {LifeState.open, LifeState.upcoming}
     assert opportunity.india_eligibility.value == "verified_yes"
     assert opportunity.professional_eligibility.value == "verified_yes"
+
+
+@pytest.mark.integration
+async def test_volatile_compensation_ids_do_not_create_revisions(
+    session: AsyncSession, monkeypatch
+) -> None:
+    source = await make_source(session)
+    candidate = make_candidate()
+    candidate.compensation = CompensationDTO(
+        raw="{'tiers': [{'id': 'first-id', 'summary': 'USD 120K'}]}",
+        summary="USD 120K",
+        cash="USD 120K",
+        currency="USD",
+        period="per year",
+    )
+    adapter = FakeAdapter([candidate])
+    monkeypatch.setattr(ingestion, "get_adapter", lambda kind: adapter)
+    await session.commit()
+
+    await ingestion.ingest_source(session, source.id)
+    await session.commit()
+    candidate.compensation.raw = "{'tiers': [{'id': 'second-id', 'summary': 'USD 120K'}]}"
+    second = await ingestion.ingest_source(session, source.id)
+    await session.commit()
+
+    assert second.updated == 0
+    assert second.skipped == 1
+    assert await session.scalar(select(func.count(OpportunityRevision.id))) == 1
 
 
 @pytest.mark.integration

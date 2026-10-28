@@ -16,6 +16,7 @@ dist/
 build/
 *.egg-info/
 .playwright/
+.playwright-mcp/
 test-results/
 playwright-report/
 backups/
@@ -30,3 +31,6 @@ Thumbs.db
 
 *.tsbuildinfo
 
+
+secrets/*
+!secrets/.gitkeep

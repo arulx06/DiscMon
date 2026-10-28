@@ -4,6 +4,7 @@ import { Badge } from "@/components/Badge";
 import { Notice } from "@/components/Notice";
 import {
   retireSourceAction,
+  runDiscoveryAction,
   runSourceAction,
   testSourceAction,
   updateSourceAction,
@@ -29,6 +30,8 @@ export default async function SourceDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const [source, runs] = await Promise.all([api.source(id), api.sourceRuns(id)]);
+  const discovery = source.config_json.discovery as { enabled?: boolean } | undefined;
+  const discoveryReady = source.enabled && discovery?.enabled === true;
 
   return (
     <>
@@ -70,6 +73,12 @@ export default async function SourceDetailPage({
             <input type="hidden" name="id" value={source.id} />
             <button className="primary" type="submit" disabled={!source.enabled}>
               Run now
+            </button>
+          </form>
+          <form action={runDiscoveryAction}>
+            <input type="hidden" name="id" value={source.id} />
+            <button type="submit" disabled={!discoveryReady}>
+              Scan for links
             </button>
           </form>
           <form action={retireSourceAction}>
@@ -174,6 +183,14 @@ export default async function SourceDetailPage({
               <label>
                 Schedule cron
                 <input name="schedule_cron" defaultValue={source.schedule_cron ?? ""} maxLength={64} />
+              </label>
+              <label>
+                Adapter configuration JSON
+                <textarea
+                  name="config_json"
+                  rows={10}
+                  defaultValue={formatJson(source.config_json)}
+                />
               </label>
               <label className="check">
                 <input name="enabled" type="checkbox" defaultChecked={source.enabled} /> Enabled

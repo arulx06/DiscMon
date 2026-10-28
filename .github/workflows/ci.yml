@@ -34,11 +34,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e "services/api[dev]"
-      - run: python -m alembic -c services/api/alembic.ini upgrade head
+      - run: python -m alembic -c alembic.ini upgrade head
+        working-directory: services/api
         env:
           DATABASE_URL: postgresql+psycopg://discmon:discmon@localhost:55432/discmon_test
-      - run: ruff check services/api
-      - run: pytest services/api/tests -q
+      - run: ruff check app tests scripts
+        working-directory: services/api
+      - run: mypy app scripts
+        working-directory: services/api
+      - run: pytest tests -q
+        working-directory: services/api
 
   web:
     runs-on: ubuntu-latest
