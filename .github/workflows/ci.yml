@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: discmon
+          POSTGRES_PASSWORD: discmon
+          POSTGRES_DB: discmon_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U discmon"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://discmon:discmon@localhost:55432/discmon_test
+      TEST_DATABASE_URL: postgresql+psycopg://discmon:discmon@localhost:55432/discmon_test
+      APP_ENV: test
+      OWNER_AUTH_MODE: disabled
+      OWNER_API_TOKEN: test-owner-token
+      SESSION_SECRET: test-session-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e "services/api[dev]"
+      - run: python -m alembic -c services/api/alembic.ini upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://discmon:discmon@localhost:55432/discmon_test
+      - run: ruff check services/api
+      - run: pytest services/api/tests -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build

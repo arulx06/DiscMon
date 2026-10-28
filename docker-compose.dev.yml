@@ -1,0 +1,28 @@
+name: discmon-dev
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: discmon
+    ports:
+      - "127.0.0.1:55432:5432"
+
+  api:
+    environment:
+      APP_ENV: development
+      OWNER_AUTH_MODE: disabled
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./services/api:/app
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  web:
+    environment:
+      INTERNAL_API_URL: http://api:8000
+      INTERNAL_API_TOKEN: dev-owner-token
+    command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next

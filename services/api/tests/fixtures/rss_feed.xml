@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Opportunities</title>
+    <link>https://example.org/opportunities</link>
+    <description>Example feed</description>
+    <item>
+      <title>AI Residency 2027</title>
+      <link>https://example.org/opportunities/ai-residency-2027</link>
+      <guid>ai-residency-2027</guid>
+      <pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate>
+      <description>Open to working professionals. Remote worldwide. Applications close on 15 November 2026.</description>
+    </item>
+  </channel>
+</rss>

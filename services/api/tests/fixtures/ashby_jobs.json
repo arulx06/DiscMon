@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "id": "ashby-1",
+      "title": "Founding Engineer",
+      "location": "Remote",
+      "secondaryLocations": [{"location": "India"}],
+      "isRemote": true,
+      "descriptionPlain": "Open to working professionals. Applications close on 30 November 2026.",
+      "jobUrl": "https://jobs.ashbyhq.com/example/ashby-1",
+      "applyUrl": "https://jobs.ashbyhq.com/example/ashby-1/apply",
+      "department": "Engineering",
+      "employmentType": "Full-time",
+      "publishedAt": "2026-09-15T08:00:00Z",
+      "compensation": {
+        "compensationTierSummary": "INR 40L - INR 60L"
+      }
+    }
+  ]
+}

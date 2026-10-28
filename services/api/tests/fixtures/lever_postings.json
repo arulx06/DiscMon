@@ -1,0 +1,23 @@
+{
+  "postings": [
+    {
+      "id": "lever-abc",
+      "text": "Staff Platform Engineer",
+      "categories": {
+        "location": "Remote - India",
+        "commitment": "Full-time"
+      },
+      "descriptionPlain": "Open to working professionals. Build distributed systems.",
+      "hostedUrl": "https://jobs.lever.co/example/lever-abc",
+      "applyUrl": "https://jobs.lever.co/example/lever-abc/apply",
+      "salaryRange": {
+        "min": 100000,
+        "max": 150000,
+        "currency": "USD",
+        "interval": "per-year"
+      },
+      "createdAt": "2026-09-01T09:00:00Z",
+      "workplaceType": "remote"
+    }
+  ]
+}

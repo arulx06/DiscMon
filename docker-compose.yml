@@ -1,0 +1,123 @@
+name: discmon
+
+x-api-env: &api-env
+  APP_ENV: ${APP_ENV:-development}
+  APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+  DATABASE_URL: postgresql+psycopg://discmon:${POSTGRES_PASSWORD:-discmon}@postgres:5432/discmon
+  OWNER_AUTH_MODE: ${OWNER_AUTH_MODE:-token}
+  OWNER_API_TOKEN: ${OWNER_API_TOKEN:-dev-owner-token}
+  SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+  TZ: UTC
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  CHANGEDETECTION_BASE_URL: ${CHANGEDETECTION_BASE_URL:-}
+  CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
+  CHANGEDETECTION_WEBHOOK_SECRET: ${CHANGEDETECTION_WEBHOOK_SECRET:-}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_ALLOWED_CHAT_ID: ${TELEGRAM_ALLOWED_CHAT_ID:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_TO: ${SMTP_TO:-}
+  AI_ENABLED: ${AI_ENABLED:-false}
+  COLLECTOR_GLOBAL_CONCURRENCY: ${COLLECTOR_GLOBAL_CONCURRENCY:-4}
+  DEFAULT_SOURCE_INTERVAL_HOURS: ${DEFAULT_SOURCE_INTERVAL_HOURS:-24}
+  FETCH_TIMEOUT_SECONDS: ${FETCH_TIMEOUT_SECONDS:-20}
+  MAX_RESPONSE_BYTES: ${MAX_RESPONSE_BYTES:-20000000}
+  RAW_RETENTION_DAYS: ${RAW_RETENTION_DAYS:-30}
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: discmon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-discmon}
+      POSTGRES_DB: discmon
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U discmon -d discmon"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./services/api
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./source_registry_seed.yaml:/app/source_registry_seed.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    build:
+      context: ./services/api
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  scheduler:
+    build:
+      context: ./services/api
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+    command: ["python", "-m", "app.scheduler"]
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+    restart: unless-stopped
+    environment:
+      INTERNAL_API_URL: http://api:8000
+      INTERNAL_API_TOKEN: ${OWNER_API_TOKEN:-dev-owner-token}
+      NEXT_PUBLIC_APP_NAME: DiscMon
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  changedetection:
+    image: ghcr.io/dgtlmoon/changedetection.io:0.50.6
+    profiles: ["changedetection"]
+    restart: unless-stopped
+    environment:
+      PLAYWRIGHT_DRIVER_URL: ""
+    volumes:
+      - changedetection:/datastore
+    ports:
+      - "127.0.0.1:5000:5000"
+
+volumes:
+  pgdata:
+  changedetection:

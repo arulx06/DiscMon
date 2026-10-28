@@ -1,0 +1,108 @@
+# DiscMon source registry seed candidates.
+# Verification required before enabling; not claims about active roles, eligibility,
+# permissions to scrape, or the presence of RSS feeds.
+# The application must provide a review/test/enable flow.
+version: 1
+sources:
+  - name: Polaris Fellowship
+    url: https://fellowship.polariscampus.com/
+    category: fellowship
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Check whether future cohorts allow already-employed, nonstudent applicants.
+  - name: CNCF LFX Mentorship
+    url: https://github.com/cncf/mentoring
+    category: open_source
+    preferred_adapter: github
+    enabled: false
+    notes: Verify participant employment/availability requirements.
+  - name: Linux Foundation Mentorship
+    url: https://www.linuxfoundation.org/about/mentorship-programs/
+    category: open_source
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Program-specific eligibility and schedules required.
+  - name: MLH Fellowship
+    url: https://fellowship.mlh.com/
+    category: fellowship
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Check time commitments and employment restrictions.
+  - name: OpenAI Emerging Talent
+    url: https://openai.com/careers/emerging-talent/
+    category: early_career
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Check country restrictions and requirements per opening.
+  - name: OpenAI Residency
+    url: https://openai.com/residency/
+    category: research
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Relocation may be required; not assume remote from India.
+  - name: Vultr Careers
+    url: https://www.vultr.com/company/careers/
+    category: cloud_infrastructure
+    preferred_adapter: static_html
+    enabled: false
+    notes: Discover actual ATS board through approved URL; use ATS API if possible.
+  - name: Cloudflare Careers
+    url: https://www.cloudflare.com/careers/jobs/
+    category: cloud_infrastructure
+    preferred_adapter: static_html
+    enabled: false
+    notes: Determine ATS and India eligibility per role.
+  - name: GitLab Careers
+    url: https://about.gitlab.com/jobs/
+    category: developer_tools
+    preferred_adapter: static_html
+    enabled: false
+    notes: Remote is often country-restricted.
+  - name: Y Combinator Work at a Startup
+    url: https://www.ycombinator.com/jobs
+    category: startup_jobs
+    preferred_adapter: manual
+    enabled: false
+    notes: Public information only; do not bypass login or anti-bot restrictions.
+  - name: Wellfound
+    url: https://wellfound.com/
+    category: startup_jobs
+    preferred_adapter: manual
+    enabled: false
+    notes: Do not scrape restricted profile or posting content.
+  - name: Devpost
+    url: https://devpost.com/
+    category: hackathons
+    preferred_adapter: manual
+    enabled: false
+    notes: Confirm event rules/working-professional eligibility individually.
+  - name: Kaggle Competitions
+    url: https://www.kaggle.com/competitions
+    category: ai_competitions
+    preferred_adapter: manual
+    enabled: false
+    notes: Check eligibility, sponsor rules, and contest restrictions.
+  - name: Hacker News
+    url: https://news.ycombinator.com/
+    category: engineering_community
+    preferred_adapter: manual
+    enabled: false
+    notes: Prefer permitted public APIs or RSS for monthly hiring threads.
+  - name: Z Fellows
+    url: https://www.zfellows.com/
+    category: founder_network
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Founder route, not salary or conventional engineering role.
+  - name: Entrepreneurs First
+    url: https://www.joinef.com/
+    category: founder_network
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Full-time commitment likely conflicts with IDFC; opt-in category.
+  - name: Antler India
+    url: https://www.antler.co/location/india
+    category: founder_network
+    preferred_adapter: changedetection
+    enabled: false
+    notes: Investment/funding is not personal compensation.

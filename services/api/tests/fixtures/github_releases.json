@@ -1,0 +1,15 @@
+{
+  "items": [
+    {
+      "repo": "example/project",
+      "item": {
+        "id": 99,
+        "name": "Open Source Fellowship 2027",
+        "html_url": "https://github.com/example/project/releases/tag/fellowship-2027",
+        "body": "Open to working professionals. Applications close on 30 November 2026.",
+        "published_at": "2026-10-01T00:00:00Z"
+      }
+    }
+  ],
+  "mode": "releases"
+}

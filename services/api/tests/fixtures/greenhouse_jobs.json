@@ -1,0 +1,17 @@
+{
+  "meta": {"name": "Example Labs"},
+  "jobs": [
+    {
+      "id": 101,
+      "title": "Senior Backend Engineer",
+      "location": {"name": "Bengaluru, India"},
+      "content": "<p>Open to working professionals. Build PostgreSQL and cloud services. Salary USD 120,000 per year.</p>",
+      "absolute_url": "https://boards.greenhouse.io/example/jobs/101",
+      "updated_at": "2026-10-01T10:00:00Z",
+      "metadata": [
+        {"name": "Salary Range", "value": "USD 120000"},
+        {"name": "Employment Type", "value": "Full-time"}
+      ]
+    }
+  ]
+}
