@@ -72,6 +72,32 @@ capabilities and applies every resource/routing check. A positive mocked v5
 case was added (19 tests total); unsupported v1 remains rejected. No dependency
 was changed. CI now prints only Docker/Compose versions before the checks.
 
+### Automatic CI evidence for code commit `2dc57fa`
+
+- `gh run watch 43318019528 --repo arulx06/DiscMon --exit-status --interval 15`
+  exited 0. PR run https://github.com/arulx06/DiscMon/actions/runs/43318019528
+  concluded **success**; backend, web and compose-preflight all succeeded.
+- New non-mutating job: Docker 29.4.2 / Compose v5.1.3 / Python 3.12.16;
+  `python3 -m unittest discover -s scripts/tests -v`: 19 tests, OK, exit 0.
+  Actual `--check-host` printed `HOST CHECK PASS` and `CONFIG PASS`, exit 0.
+  Job: https://github.com/arulx06/DiscMon/actions/runs/43318019528/job/131531015060
+- Push run's preflight also succeeded:
+  https://github.com/arulx06/DiscMon/actions/runs/43318008627/job/131530975717
+  (`19 tests`, `HOST CHECK PASS`, exit 0). Its web job passed as well.
+- Unchanged backend job on ephemeral PostgreSQL 18: `111 passed, 1 warning in
+  31.51s`; Ruff `All checks passed!`, mypy `Success: no issues found in 61 source
+  files`. Web typecheck, lint and production build passed. Existing CI migration
+  occurred only inside that pre-existing job's disposable database, not locally
+  and not against production; no manual migration or workflow dispatch occurred.
+- Initial code `7c8f61c` runs `43317856314` (push) and `43317907260` (PR) failed
+  the new preflight job's version guard; fixed rather than skipped. No tests or
+  isolation checks were weakened. Runner action-deprecation/ubuntu-label notices
+  were observed; unrelated action/dependency upgrades are outside Task 2.
+- PR https://github.com/arulx06/DiscMon/pull/2 targets the required handoff branch,
+  remains unmerged, with update monitoring enabled and auto-merge disabled.
+  This evidence-only documentation commit will trigger fresh automatic checks;
+  current-head results are attached to the PR, not a claim of runtime acceptance.
+
 ### Test interpretation and remaining gap
 
 Positive tests inspect real base and dev JSON and a fresh temporary Compose

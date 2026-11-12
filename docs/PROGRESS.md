@@ -25,8 +25,14 @@ Authority: docs/specification.md
 - Actual base/base+dev rendering passed (exit 0) after deliberately unsetting
   inherited Compose/Docker routing variables for that command only. Host check
   refused (exit 1): local Docker daemon unavailable. No runtime replacement or
-  privileged Docker setup attempted. Automatic CI evidence will be recorded
-  after publication; no existing backend/web check is changed.
+  privileged Docker setup attempted. Automatic PR CI for code
+  commit `2dc57fa` passed: https://github.com/arulx06/DiscMon/actions/runs/43318019528
+  (all three jobs). Fresh runner Docker 29.4.2 / Compose v5.1.3: 19 preflight
+  tests and actual host checks passed. Backend: 111 passed, 1 existing warning;
+  Ruff/mypy and web typecheck/lint/build passed. Push preflight also passed:
+  https://github.com/arulx06/DiscMon/actions/runs/43318008627/job/131530975717
+  No existing backend/web check is changed. Initial CI version-guard failure
+  and its compatibility fix are recorded in the changelog.
 - No application/container/volume/database/backup mutation, migrations, source
   import, ingestion or private configuration reads. No backend pytest run locally.
   CI's pre-existing disposable PostgreSQL job remains unchanged.
