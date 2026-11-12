@@ -3,6 +3,37 @@
 Dates: 2026-10-30 (historical status) and 2026-11-12 (stabilization checkpoint)
 Authority: docs/specification.md
 
+## 2026-11-12 Task 2 — safe Compose configuration preflight
+
+- Exact base: `739192275e7d4f239afa2430e36acfd8419feec9`, verified by fetching
+  `handoff/stabilize-idfc-audit-20261112`. New separate worktree `discmon-task2`,
+  branch `hoplite/m0-compose-preflight-20261113`; older checkout at `2c31234`
+  remains clean and unchanged.
+- Standard-library Python preflight renders base and base+dev with explicit
+  project/files, empty env file, isolated HOME/Docker config, no inherited app
+  settings and no service env-file resolution. Rejects protected/malformed
+  project names, external/unscoped resources, unexpected routing/profiles/mounts
+  and non-local or overlapping ports. Reports secret binds and fixed-port risks.
+- Default success means CONFIG ONLY, not runtime isolation. Optional host checks
+  inventory names/project labels/published ports read-only and probe localhost ports; they fail
+  closed without the local daemon. No arbitrary env/config override is accepted.
+- Local Python 3.12.3 / Docker CLI 29.1.3 / Compose 2.40.3:
+  `python3 -m unittest discover -s scripts/tests -v` — 18 passed, 0 failed,
+  0 skipped, exit 0; includes two actual Compose cases and mocked failure/host
+  cases, plus one actual ephemeral occupied-port test. `py_compile` and
+  `git diff --check` passed (exit 0). Exact commands/limitations in changelog.
+- Actual base/base+dev rendering passed (exit 0) after deliberately unsetting
+  inherited Compose/Docker routing variables for that command only. Host check
+  refused (exit 1): local Docker daemon unavailable. No runtime replacement or
+  privileged Docker setup attempted. Automatic CI evidence will be recorded
+  after publication; no existing backend/web check is changed.
+- No application/container/volume/database/backup mutation, migrations, source
+  import, ingestion or private configuration reads. No backend pytest run locally.
+  CI's pre-existing disposable PostgreSQL job remains unchanged.
+- **M0 remains PARTIAL**: separately authorized clean-volume runtime deployment,
+  migration, health checks and resource-safe cleanup remain unverified. No M5/M6
+  work or supervisory acceptance is claimed.
+
 ## 2026-11-12 Task 1 — fail-closed PostgreSQL test isolation
 
 - Exact starting checkpoint: `665f2380bcc24a62acdef91bd9e361b563406b91`, from

@@ -1,5 +1,64 @@
 ﻿# Operations runbook
 
+## Compose preflight and isolated drill boundary
+
+Run the static Compose preflight from the repository root before considering a
+runtime test:
+
+```bash
+python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
+```
+
+Use a unique lowercase suffix. The script requires Python 3.12+ (standard
+library only) and Docker Compose v2. It renders the base and
+base-plus-`docker-compose.dev.yml` configurations with `--env-file /dev/null`,
+`config --no-env-resolution` and a sanitized environment. It emits redacted
+service, volume, port, profile and routing details; it accepts no arbitrary
+config/env/override and does not read `.env` or secrets.
+
+It refuses non-empty inherited `COMPOSE_FILE`, `COMPOSE_PROJECT_NAME`,
+`COMPOSE_ENV_FILES`, `COMPOSE_PROFILES`, `DOCKER_HOST` or `DOCKER_CONTEXT`.
+Deliberately unset them only for a local static invocation when needed; do
+not unset them to redirect a host check. `--check-host` uses the local Docker
+socket/default local context only, never a remote daemon.
+Default static mode does not query Docker or mutate runtime resources. It
+reports scoped volumes but cannot establish freshness or port availability.
+Optional `--check-host` requires Docker and performs read-only container,
+volume and network list queries plus local socket bind probes.
+
+The current host ports are fixed at `3000`, `8000`, `55432`, and `5000` with
+the changedetection profile, so a unique project name alone does not prevent
+port conflicts. Neither preflight mode authorizes deployment, migration,
+seeding or any other runtime mutation. M0 remains **PARTIAL**; preflight is not
+acceptance evidence.
+
+A clean-volume drill is future work and requires separate explicit
+authorization plus a pinned commit checked out fresh in a disposable worktree
+with no production `.env`, secrets or credentials available. Use a disposable
+project, network and volume and a test-only override that removes secrets
+mounts and routes PostgreSQL to isolated test-only database/user/credentials.
+Bind only on confirmed nonconflicting localhost ports.
+
+Wait for PostgreSQL 18 readiness. If a migration is separately authorized,
+check the API directly at `http://127.0.0.1:<api-port>/health/live` and
+`http://127.0.0.1:<api-port>/health/ready`; independently check availability
+of the web root at `http://127.0.0.1:<web-port>/`. Do not treat these as
+web-proxied API health checks. Import disabled sources only with separate
+authorization. Workers and scheduler must never start in Task 2.
+
+Capture container, network and volume inventories before and after and verify
+pre-existing resources remain unchanged. Clean up only exact container, network
+and volume IDs created by this drill, then verify baseline resources remain;
+never use `docker compose down -v`.
+
+The Compose plugin must be available without per-user Docker configuration
+(for example, a system-installed plugin). The script deliberately uses an empty
+Docker config directory; a plugin installed only under `~/.docker/cli-plugins`
+is not supported. It checks the required JSON and `--no-env-resolution`
+capabilities and suppresses CLI diagnostics that might contain secrets. Host
+checks also inspect published Docker TCP ports, including NAT-only mappings,
+not just socket listeners.
+
 ## Daily
 
 - Open Overview: check pipeline health, source failures and attention list.
