@@ -34,9 +34,20 @@ Authority: docs/specification.md
   performed, per Task 1. All local SQL execution was mocked; no PostgreSQL server
   or production application service was contacted. No `.env`, secrets, backups,
   existing databases or volumes were accessed or modified.
-- PostgreSQL 18 automatic PR CI: pending publication at this checkpoint; no
-  manual workflow dispatch/rerun. Fresh local Compose acceptance remains open.
-  This safeguard does not establish M0 acceptance or supervisory Task 1 acceptance.
+- Automatic CI for implementation commit `8e49cb0` **passed** on PostgreSQL
+  **18.6** / Python 3.12.16: `pytest tests -q` —
+  `111 passed, 1 warning in 26.25s` (exit 0; existing feedparser deprecation).
+  Ruff, mypy and web typecheck/lint/build also passed. The ephemeral CI service
+  supplied `discmon_test`, authenticated/effective user `discmon`, client
+  `localhost:55432`; every fixture's actual identity/endpoint checks passed.
+  Push run: https://github.com/arulx06/DiscMon/actions/runs/43313987678
+  PR run: https://github.com/arulx06/DiscMon/actions/runs/43314034490
+  Both backend/web jobs succeeded on both runs. No manual dispatch/rerun.
+- PR https://github.com/arulx06/DiscMon/pull/1 targets the handoff branch, remains
+  unmerged, update monitoring enabled, auto-merge disabled. Only the five scoped
+  files changed. Final `git diff --check` passed; generated files/logs excluded.
+  Recommendation: **READY FOR REVIEW**, not supervisory acceptance. Fresh local
+  Compose acceptance and local integration remain open; M0 is not declared accepted.
 - Full commands, safety coverage and limitations: `docs/changelog.md`, Task 1.
 
 ## 2026-11-12 stabilization checkpoint

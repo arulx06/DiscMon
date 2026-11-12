@@ -87,16 +87,48 @@ only synthetic endpoints/dummy credentials were used for negative cases. No
 production connections, `.env`/secret/backup reads, data changes, container
 restarts or manual migrations occurred.
 
-Automatic PostgreSQL 18 push/PR CI is pending publication; no workflow was
-manually triggered/rerun. Fresh local Compose acceptance remains incomplete.
+Automatic push/PR CI **passed** for implementation commit `8e49cb0`:
+
+- Push run: https://github.com/arulx06/DiscMon/actions/runs/43313987678
+- PR run: https://github.com/arulx06/DiscMon/actions/runs/43314034490
+- Both backend and web jobs succeeded on both runs; observed with
+  `gh run watch 43313987678 --exit-status --interval 5` (exit 0),
+  `gh run view 43313987678 --job 131517080193 --log` (exit 0), and
+  `gh run view 43314034490 --json status,conclusion,url,jobs` (exit 0).
+- Actual PostgreSQL server startup log: PostgreSQL **18.6**, disposable service
+  created by the existing `postgres:18-alpine` CI workflow. Python **3.12.16**.
+  Existing CI migrations ran only against that newly created CI service; no
+  manual migrations or manual workflow dispatch/rerun occurred.
+- `pytest tests -q`: **111 passed, 1 warning in 26.25s**, exit 0. Warning:
+  existing feedparser `updated_parsed`/`published_parsed` deprecation in the RSS
+  adapter fixture test. No new guard warnings. All 101 existing tests plus the
+  10 safety tests passed, preserving per-case cleanup and integration behavior.
+- Actual connected database/user/client endpoint were verified by the guard on
+  each real fixture connection: `discmon_test`, `discmon` (both current/session
+  user), `localhost:55432`, resolved loopback. The service's container port is
+  5432; checks correctly use client routing rather than server-side NAT values.
+- `ruff check app tests scripts`: `All checks passed!`; `mypy app scripts`:
+  `Success: no issues found in 61 source files`; both exit 0. Web
+  `npm run typecheck`, `npm run lint`, `npm run build` also exited 0.
+- Nonblocking CI environment notices: Node 20 action-runtime deprecation and
+  ubuntu-latest migration; unchanged and outside this task.
+- PR https://github.com/arulx06/DiscMon/pull/1 targets
+  `handoff/stabilize-idfc-audit-20261112`, not master; update monitoring enabled,
+  auto-merge disabled, no merge/queue operation. No review threads were open at
+  publication. Independent code review found no remaining actionable safety
+  blocker after resolved-host validation was added.
+
+Fresh local Compose acceptance remains incomplete.
 The guard verifies configuration/identity, not ownership or disposability: an
 operator must still independently provision/verify the test database. A local
 proxy cannot be distinguished from a direct listener by these identity checks.
 Generated virtualenv, egg-info, bytecode and tool caches are ignored/excluded;
 execution logs and helper scripts remain outside the checkout. Only the guard,
 its regressions and these three documentation files belong to the checkpoint.
-Recommendation at this pre-CI checkpoint: ready for review with local integration
-and fresh Compose limitations explicitly open; no acceptance claim.
+Recommendation: **READY FOR REVIEW**, with local integration and fresh Compose
+limitations explicitly open; no supervisory Task 1 or M0 acceptance claim.
+The evidence follow-up changes only progress/changelog documentation; guard and
+regression code are unchanged from the successful implementation CI checkpoint.
 
 
 ## 2026-11-12
