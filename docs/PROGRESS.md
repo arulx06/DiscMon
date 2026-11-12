@@ -18,7 +18,7 @@ Authority: docs/specification.md
   inventory names/project labels/published ports read-only and probe localhost ports; they fail
   closed without the local daemon. No arbitrary env/config override is accepted.
 - Local Python 3.12.3 / Docker CLI 29.1.3 / Compose 2.40.3:
-  `python3 -m unittest discover -s scripts/tests -v` — 18 passed, 0 failed,
+  `python3 -m unittest discover -s scripts/tests -v` — 19 passed, 0 failed,
   0 skipped, exit 0; includes two actual Compose cases and mocked failure/host
   cases, plus one actual ephemeral occupied-port test. `py_compile` and
   `git diff --check` passed (exit 0). Exact commands/limitations in changelog.

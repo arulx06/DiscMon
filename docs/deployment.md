@@ -9,7 +9,7 @@ python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
 ```
 
 The preflight requires Python 3.12+ (standard library only) and Docker
-Compose v2. It validates the base Compose file and the base plus
+Compose v2/v5. It validates the base Compose file and the base plus
 `docker-compose.dev.yml` overlay using `--env-file /dev/null`,
 `config --no-env-resolution`, and a sanitized environment. It does not read
 `.env` or secrets, start services, or mutate runtime resources or data. Its

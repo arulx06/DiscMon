@@ -38,7 +38,7 @@ operation. Use a unique lowercase suffix for each preflight project name:
 python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
 ```
 
-The script requires Python 3.12+ (standard library only) and Docker Compose v2.
+The script requires Python 3.12+ (standard library only) and Docker Compose v2/v5.
 It renders the base configuration and base plus the `docker-compose.dev.yml`
 overlay with `--env-file /dev/null`, `config --no-env-resolution`, and a
 sanitized environment. It does not read `.env` or secrets, start services, or

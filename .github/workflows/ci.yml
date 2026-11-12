@@ -69,6 +69,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: docker --version && docker compose version
       - run: python3 -m unittest discover -s scripts/tests -v
       - run: >-
           python3 scripts/compose_preflight.py

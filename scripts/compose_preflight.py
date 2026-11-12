@@ -33,7 +33,7 @@ def call(command, env):
         raise Unsafe("Required CLI unavailable or timed out; no runtime action taken.") from None
     # Compose diagnostics can contain interpolated secrets. Never forward them.
     require(result.returncode == 0,
-            "CLI check failed (system-installed Compose v2 with config --no-env-resolution --format json required); "
+            "CLI check failed (system-installed Compose v2/v5 with config --no-env-resolution --format json required); "
             "diagnostics suppressed to protect secrets.")
     return result.stdout
 
@@ -166,18 +166,18 @@ def main(args):
                      "COMPOSE_PROFILES", "DOCKER_HOST", "DOCKER_CONTEXT")),
             "Unexpected inherited Compose/Docker routing input; unset it before inspection.")
     docker = shutil.which("docker")
-    require(docker is not None, "Docker CLI unavailable; install Docker Compose v2 for static rendering.")
+    require(docker is not None, "Docker CLI unavailable; install Docker Compose v2/v5 for static rendering.")
     # Empty HOME/config and explicit env file prevent implicit private configuration.
     with tempfile.TemporaryDirectory(prefix="discmon-preflight-") as home:
         env = {"PATH": os.defpath, "HOME": home, "DOCKER_CONFIG": home,
                "LANG": "C.UTF-8"}
         version = call([docker, "compose", "version", "--short"], env).strip()
-        require(re.fullmatch(r"v?2\.\d+\.\d+(?:[-+][a-zA-Z0-9.~-]+)?", version) is not None,
-                "Docker Compose v2 with config --format json required.")
+        require(re.fullmatch(r"v?[25]\.\d+\.\d+(?:[-+][a-zA-Z0-9.~-]+)?", version) is not None,
+                "Docker Compose v2/v5 with config --format json required.")
         capabilities = call([docker, "compose", "config", "--help"], env)
         require(all(flag in capabilities for flag in ("--no-env-resolution", "--format")),
                 "Compose lacks required config --no-env-resolution / --format capabilities.")
-        print("Docker Compose v2 available; inherited application settings ignored.")
+        print("Docker Compose v2/v5 available; inherited application settings ignored.")
         ports = set()
         for files in (("docker-compose.yml",), ("docker-compose.yml", "docker-compose.dev.yml")):
             command = [docker, "compose", "--env-file", "/dev/null", "--project-directory",

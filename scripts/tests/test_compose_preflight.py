@@ -138,6 +138,14 @@ class PreflightTests(unittest.TestCase):
                 self.invoke(responder=responder)
             self.assertNotIn(SENTINEL, str(error.exception))
 
+    def test_supported_compose_v5_uses_identical_safety_checks(self):
+        def responder(command, output):
+            if "version" in command:
+                output = "v5.0.0"
+            return subprocess.CompletedProcess(command, 0, output, "")
+        self.invoke(responder=responder)
+        self.assertIn("CONFIG PASS", self.output.getvalue())
+
     def test_unsupported_compose_version(self):
         def responder(command, output):
             return subprocess.CompletedProcess(command, 0, "1.29.2", "")

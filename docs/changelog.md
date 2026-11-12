@@ -36,7 +36,7 @@ python3 --version
 Python 3.12.3; exit 0
 
 python3 -m unittest discover -s scripts/tests -v
-Ran 18 tests; OK; exit 0 (0 failed, 0 skipped)
+Ran 19 tests; OK; exit 0 (0 failed, 0 skipped)
 python3 -m py_compile scripts/compose_preflight.py scripts/tests/test_compose_preflight.py
 exit 0
 git diff --check
@@ -58,6 +58,19 @@ Initial unmodified invocation refused inherited Docker/Compose routing input
 not change any saved configuration or access a remote daemon. Host checks use
 the local default socket only. Docker daemon unavailability is not static
 render failure and was not worked around by starting/replacing services.
+
+### Initial CI compatibility finding
+
+The first automatic push run `43317856314` and PR run `43317907260` rejected
+runner Compose at the version-major guard (18 tests, one error in the real
+Compose positive test). No unsafe fallback or runtime action was attempted.
+Docker's current official documentation states that Compose v2 and v5 use the
+same CLI/specification, with v5 functionally identical to v2:
+https://docs.docker.com/compose/intro/history/
+The guard now accepts these two supported majors, still probes required config
+capabilities and applies every resource/routing check. A positive mocked v5
+case was added (19 tests total); unsupported v1 remains rejected. No dependency
+was changed. CI now prints only Docker/Compose versions before the checks.
 
 ### Test interpretation and remaining gap
 
