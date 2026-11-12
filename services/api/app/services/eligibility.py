@@ -24,6 +24,22 @@ INDIA_PATTERNS = [
     r"\bahmedabad\b",
     r"\bjaipur\b",
     r"\bkochi\b",
+    r"\bkerala\b",
+    r"\bkarnataka\b",
+    r"\btamil nadu\b",
+    r"\btelangana\b",
+    r"\bandhra pradesh\b",
+    r"\bmaharashtra\b",
+    r"\bgujarat\b",
+    r"\brajasthan\b",
+    r"\buttar pradesh\b",
+    r"\bharyana\b",
+    r"\bwest bengal\b",
+    r"\bodisha\b",
+    r"\bmadhya pradesh\b",
+    r"\bchhattisgarh\b",
+    r"\bbihar\b",
+    r"\bgoa\b",
     r"\bremote\s*[-–(]\s*india\b",
     r"\bindia\s*[-–)]\s*remote\b",
 ]
@@ -89,11 +105,28 @@ PROFESSIONAL_YES_PATTERNS = [
     r"\bno\s+student\s+status\s+required\b",
     r"\banyone\s+(?:can\s+apply|is\s+welcome)\b",
     r"\bstudent\s+status\s+(?:is\s+)?not\s+required\b",
+    r"\b\d{1,2}\s*(?:\+|-|–|—|to)\s*\d{0,2}\s*\+?\s*years?\s+(?:of|in)\s+"
+    r"professional\s+(?:software\s+)?(?:development|engineering)\s+experience\b",
+    r"\b\d{1,2}\s*(?:\+|-|–|—|to)\s*\d{0,2}\s*\+?\s*years?\s+(?:of|in)\s+"
+    r"(?:production|industry)(?:\s+(?:experience|code|software|engineering))?\b",
 ]
 
 STUDENT_EXCEPTION_PATTERNS = [
     r"\bstudents?\s+(?:and|or)\s+(?:working\s+)?professionals?\b",
     r"\bprofessionals?\s+(?:and|or)\s+students?\b",
+]
+
+RECENT_GRADUATE_EXCEPTION_PATTERNS = [
+    r"\bcompleted\s+(?:their|your|the)?\s*(?:latest\s+)?degree\s+in\s+\d{4}\b",
+    r"\bgraduated\s+(?:in|between)\s+\d{4}\b",
+    r"\bdegree\s+(?:completed|awarded)\s+in\s+\d{4}\b",
+]
+
+INDIA_ELIGIBILITY_PATTERNS = [
+    r"\bindian\s+citizens?\b",
+    r"\bcitizens?\s+of\s+india\b",
+    r"\bresidents?\s+of\s+india\b",
+    r"\bmust\s+(?:be\s+)?(?:currently\s+)?(?:based|residing|located)\s+in\s+india\b",
 ]
 
 REMOTE_WORLDWIDE_PATTERNS = [
@@ -187,11 +220,12 @@ def assess_eligibility(
     reasons: dict[str, str] = {}
 
     professional_yes_hit = _matches(PROFESSIONAL_YES_PATTERNS, text)
-    student_only_hit = (
-        None
-        if _has_exception(text) and professional_yes_hit
-        else _matches(STUDENT_ONLY_PATTERNS, text)
-    )
+    recent_graduate_exception = _matches(RECENT_GRADUATE_EXCEPTION_PATTERNS, text)
+    student_only_hit = _matches(STUDENT_ONLY_PATTERNS, text)
+    if student_only_hit and (
+        (_has_exception(text) and professional_yes_hit) or recent_graduate_exception
+    ):
+        student_only_hit = None
 
     if student_only_hit:
         professional = EligibilityStatus.verified_no
@@ -213,20 +247,36 @@ def assess_eligibility(
         professional = EligibilityStatus.unknown
         student_only = False
         student_eligibility = EligibilityStatus.unknown
-        reasons["professional"] = (
-            "No explicit statement that working professionals are eligible; absence of a "
-            "student restriction is not positive evidence"
-        )
-        reasons["student"] = "No explicit student-only restriction found; status remains unknown"
+        if recent_graduate_exception:
+            reasons["professional"] = (
+                "Graduation-year window includes recent graduates as well as current "
+                "students; eligibility is not student-only"
+            )
+            reasons["student"] = (
+                "Graduation-year window is broader than current students; student-only "
+                "status remains unknown"
+            )
+        else:
+            reasons["professional"] = (
+                "No explicit statement that working professionals are eligible; absence of a "
+                "student restriction is not positive evidence"
+            )
+            reasons["student"] = (
+                "No explicit student-only restriction found; status remains unknown"
+            )
 
     country_codes = infer_country_codes(candidate)
     remote_countries = infer_remote_countries(candidate)
     location_text = normalize_whitespace(candidate.location_text or "").lower()
     remote = candidate.is_remote or "remote" in location_text
+    india_eligibility_hit = _matches(INDIA_ELIGIBILITY_PATTERNS, text)
 
     if "IN" in country_codes:
         india = EligibilityStatus.verified_yes
         india_hit = "Location/eligibility text names India"
+    elif india_eligibility_hit:
+        india = EligibilityStatus.verified_yes
+        india_hit = f'Explicit India eligibility: "{india_eligibility_hit}"'
     elif remote:
         if "IN" in remote_countries:
             india = EligibilityStatus.verified_yes

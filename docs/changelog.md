@@ -1,5 +1,233 @@
 # Changelog
 
+## 2026-11-12
+
+### Stabilization checkpoint
+
+- Recovered the interrupted IDFC scoring audit. Removed the invalid standalone
+  `services/api/tests/run_idfc_audit.py` (incorrect ORM constructor kwargs) and
+  repaired `services/api/tests/test_idfc_scoring_audit.py` to construct real
+  `Opportunity`/`UserProfile` objects and assert v3 scoring behaviour.
+- Repaired control-character and broken-line corruption in the October
+  changelog and progress entries. October evidence is preserved as historical
+  and was not re-executed by this checkpoint.
+
+### Verification (2026-11-12)
+
+```text
+services/api> pytest -q   (DATABASE_URL=...discmon_test)
+101 passed, 1 warning in 14.08s
+
+services/api> ruff check app tests scripts
+All checks passed!
+
+services/api> mypy app scripts
+Success: no issues found in 61 source files
+
+apps/web> npm run typecheck
+apps/web> npm run lint
+apps/web> npm run build
+apps/web> npm run test:e2e   (isolated API/web, discmon_test)
+4 passed (7.2s)
+```
+
+- Backend suite ran against the isolated `discmon_test` PostgreSQL database.
+- Playwright ran against an isolated local API/web stack backed by
+  `discmon_test`; live `discmon` was not modified.
+- Historical 2026-10-29/30 results below are not re-executed unless repeated
+  above.
+
+## 2026-10-30
+
+### Added
+
+- Rules v3 scoring engine with explicit hard gates for closed/archived opportunities (life_state in (closed, archived)) and full-time commitment conflicts (opportunity.employment_conflict).
+- Differentiated career upside scoring based on opportunity type (fellowship, residency, mentorship, grant, hackathon, job) with published value signals (cash, equity/credits, high credibility).
+- Prejoin employment stage protection: full-time job openings for users with a committed prejoin start (IDFC) are capped at prepare_early with an honest career explanation, preventing distraction from IDFC preparation while allowing selective mentorships, fellowships, and grants to reach act_now or prepare_early.
+- Technical programme and mentorship project recognition: open source engineering mentorships and fellowships with non-standard project titles (e.g. CNCF LFX mentorship proposals) are evaluated based on technical scope and body evidence rather than discarded as non-engineering.
+- CNCF LFX Mentorship official source (aa60aaec-769c-425b-9f8b-a345dc8a0c72, https://github.com/cncf/mentoring), approved under the GitHub adapter with label filtering Proposal. Ingested 50 real cloud, distributed systems, and AI infrastructure mentorship project proposals.
+- Real non-job-board programme review: [CNCF LFX Proposal] Meshery MCP Server reviewed as research with explicit next action and follow-up date, rendered on /watchlist.
+- 10 new test cases in services/api/tests/test_scoring.py (19 total tests), covering positive/negative cases, prejoin caps, closed opportunity exclusions, and technical mentorship recognition. Full test suite now passes with 90 tests.
+
+### Fixed
+
+- Closed Build for Bharat Fellowship and Graphic Design records now correctly evaluate to excluded (hard gate) rather than remaining in needs_verification.
+- Rebuilt Docker containers (discmon-api, discmon-worker, discmon-scheduler) activated the corrected Ashby structured compensation extraction and v3 scoring logic in live services.
+- Re-ingested OpenAI Ashby board cleanly separated salary cash, equity, period, and currency into structured compensation fields across 814 seen records (9 created, 639 updated, 166 skipped).
+- Verified restore drill of `backups/discmon-20261029T091622Z.dump.gz` into clean disposable database discmon_restore_verify (1,075 opportunities, 1,075 sources, 14 reviews, 3 digests, alembic d4a7c1e9f210). Disposable database dropped with live database unmodified.
+
+### Verification
+
+```text
+services/api> python -m pytest -q
+90 passed, 1 warning in 17.69s
+
+services/api> ruff check app tests scripts
+All checks passed!
+
+services/api> mypy app scripts
+Success: no issues found in 61 source files
+
+apps/web> npx playwright test
+4 passed (5.1s)
+```
+
+Live database status: 1,149 opportunities (1,144 real + 5 demo fixtures), 5 enabled sources (GitLab Greenhouse, OpenAI Ashby, FOSS United RSS, Hasjob Atom, CNCF LFX Mentorship GitHub), all healthy with 24h schedules, 0 alerts.
+
+
+## 2026-10-29
+
+### Added
+
+- FOSS United Job Board RSS source
+  `a08c620f-83df-4ad9-9266-79c95cd72bc4`
+  (`https://fossunited.org/jobs/rss.xml`), approved as a credible aggregator
+  with venue-only discovery. First ingestion created 7 real opportunities.
+- Hasjob Atom source `a59b9a54-0a6d-46dd-bba2-5f6f3be018f9`
+  (`https://hasjob.co/feed`), approved as a credible aggregator with venue-only
+  discovery. First ingestion created 15 real India-focused opportunities.
+- RSS/Atom metadata extraction: entry `location`, `Location:` summary text,
+  company links in summaries, author organization and title suffix fallback.
+- Title-first opportunity classification with engineering, design, sales,
+  internship and leadership title families. Body text is only a fallback.
+- Indian state names added to location inference: Kerala, Karnataka, Tamil
+  Nadu, Telangana, Andhra Pradesh, Maharashtra, Gujarat, Rajasthan, Uttar
+  Pradesh, Haryana, West Bengal, Odisha, Madhya Pradesh, Chhattisgarh, Bihar
+  and Goa.
+- Regression tests for RSS organization/location extraction, title-first
+  classification and Indian-state eligibility.
+
+### Fixed
+
+- Pinaca roles were misclassified as `founder_programme` because their body
+  mentions a founding team. They are now `job` records with score 84,
+  `prepare_early`, verified India and professional eligibility, and location
+  Gurugram.
+- Early FOSS United ingestion attributed every record to FOSS United because
+  the board link was used as the organization domain. Re-ingestion corrected
+  Pinaca to its `Pinaca (Pinaca Labs Private Limited)` organization and location.
+- Docker image builds now set `PIP_DEFAULT_TIMEOUT=120` and `PIP_RETRIES=10`
+  to tolerate transient package-index timeouts. API, worker and scheduler
+  images were rebuilt successfully and recreated.
+
+### Verification
+
+```text
+services/api> python -m pytest -q
+81 passed, 1 warning in 32.80s
+
+services/api> ruff check app tests scripts
+All checks passed!
+
+services/api> mypy app scripts
+Success: no issues found in 61 source files
+```
+
+Live database after ingestion:
+
+```text
+opportunities=1075 (1070 real + 5 fixtures)
+assessments=4143
+reviews=14
+sources=24 (4 enabled)
+alerts=0
+```
+
+Latest-assessment distribution:
+
+```text
+India:        unknown=776, verified_no=242, verified_yes=57
+Professional: unknown=1065, verified_no=1, verified_yes=9
+Buckets:      needs_verification=828, excluded=243, prepare_early=2, act_now=2
+```
+
+The only real `prepare_early` records are Pinaca SDE-1 and SDE-2 at score 84.
+The only `act_now` records are the two labelled fixtures at score 90. FOSS
+United and Hasjob discovery inspected 22 and 15 links respectively; the 23
+resulting candidates were rejected because those board pages are already
+ingested via RSS/Atom and are not independent sources.
+
+UI checks: `/opportunities` shows 1070 real records with Pinaca first and
+`/opportunities?bucket=prepare_early` shows exactly the two Pinaca records with
+source attribution to `FOSS United Job Board`. Both feeds report
+`scan_complete=false`, so they cannot close records. Backup
+`backups/discmon-20261029T065708Z.dump` was restore-drilled into
+`discmon_restore_20261029`: 1075 opportunities (5 fixtures), 24 sources, 14
+reviews and Alembic `d4a7c1e9f210`; the disposable database was dropped after
+verification. The later backup `backups/discmon-20261029T091622Z.dump.gz` has
+not yet been restore-drilled.
+
+### Field-quality repair (later 2026-10-29 run)
+
+#### Fixed
+
+- Compensation snippets now stop at clause, benefit-list and compensation-mode
+  boundaries, prefer LPA over transient lakh components, and support
+  `a/an/each month` periods plus `paid` labels. Pinaca now renders
+  `Compensation: INR 20-30 LPA + benefits`; Mango Giraffe renders
+  `paid internship, starting at ₹10,000 a month`.
+- Deadline extraction now applies explicit clocks with timezones, anchors
+  yearless deadlines to publication time, and resolves day/month ambiguity
+  instead of taking the first calendar match.
+- Build for Bharat now records exact `2026-10-18 18:29:00+00` in
+  `Asia/Kolkata`; FOSS Graphic Design records date-only `2026-09-10` with no
+  invented cutoff. Both past-deadline records are `closed`.
+- Eligibility now recognises explicit `Indian citizens` wording and recent
+  graduate exceptions. Build for Bharat is India `verified_yes`, professional
+  `unknown`, and not student-only in both feeds.
+- RSS/Atom records now map explicit employment and workplace labels. FOSS has
+  `FullTime` for all 7 records with `remote=2`, `hybrid=1`, `unknown=4`.
+- Ashby compensation now separates salary cash, equity, currency and period
+  from structured components instead of copying a combined summary into
+  `cash`; the fixture asserts the structured fields.
+
+#### Live repair
+
+After backup `backups/discmon-20261029T091622Z.dump.gz`, three host-side
+re-ingestion passes applied the corrected parser to FOSS United and Hasjob:
+6 FOSS and 4 Hasjob updates, 1 Hasjob update, then 7 FOSS updates. They created
+18 revisions across 11 opportunities, created 0 alerts, and kept the live total
+at 1,075 opportunities. Both feeds remain `scan_complete=false`.
+
+Live field checks: 658 records have compensation summaries, 1 exceeds 120
+characters (Project Tech4Dev, 151 characters with a genuine
+`depending on experience` caveat), and 0 open records have a past exact or
+date-only deadline.
+
+#### Verification
+
+```text
+services/api> python -m pytest -q
+81 passed, 1 warning in 32.80s
+
+services/api> ruff check app tests scripts
+All checks passed!
+
+services/api> mypy app scripts
+Success: no issues found in 61 source files
+```
+
+#### Remaining limitations
+
+- The running containers still use the pre-repair parser. Until an authorized
+  rebuild/restart, a scheduled scan can reintroduce the corrected RSS fields.
+- Existing Ashby `cash` values still include equity text until the corrected
+  adapter is deployed and the board is re-ingested; summaries are unaffected.
+- GitLab and Hasjob employment types are absent from source metadata; Hasjob
+  workplace is also absent, so those fields remain `unknown`.
+- The latest backup has not been restore-drilled.
+
+### Known limitations
+
+- No SMTP, Telegram, Sheets, changedetection or AI credentials; external
+  delivery remains unverified.
+- Alerts remain empty because no real records meet the immediate gate (85).
+- Hasjob approval is based on its public `/feed`, the home-page feed link and
+  robots allowing it. `/tos` governs job posting rather than feed reading; no
+  separate feed licence is published.
+- CI, clean-clone install, seven-day soak, worker-crash drill, load/memory
+  checks and retention audit remain open.
+
 ## 2026-10-28
 
 ### Added

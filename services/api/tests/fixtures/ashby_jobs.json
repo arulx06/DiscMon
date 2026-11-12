@@ -13,7 +13,25 @@
       "employmentType": "Full-time",
       "publishedAt": "2026-09-15T08:00:00Z",
       "compensation": {
-        "compensationTierSummary": "INR 40L - INR 60L"
+        "compensationTierSummary": "INR 40L - INR 60L",
+        "compensationTiers": [
+          {
+            "components": [
+              {
+                "summary": "INR 40L - INR 60L",
+                "compensationType": "Salary",
+                "interval": "1 YEAR",
+                "currencyCode": "INR"
+              },
+              {
+                "summary": "Offers Equity",
+                "compensationType": "EquityCashValue",
+                "interval": "1 YEAR",
+                "currencyCode": "INR"
+              }
+            ]
+          }
+        ]
       }
     }
   ]

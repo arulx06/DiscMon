@@ -20,6 +20,48 @@ from app.services.text import excerpt, html_to_text
 from app.services.time import parse_datetime
 from app.services.urls import canonicalize_url, domain_of
 
+_PERIOD_LABELS = {
+    "1 DAY": "per day",
+    "1 WEEK": "per week",
+    "1 MONTH": "per month",
+    "1 YEAR": "per year",
+    "1 HOUR": "per hour",
+}
+
+
+def _ashby_compensation(
+    compensation: object, summary: str | None
+) -> tuple[str | None, str | None, str | None, str | None]:
+    if not isinstance(compensation, dict):
+        return summary, None, None, None
+    components: list[dict[str, object]] = []
+    tiers = compensation.get("compensationTiers")
+    if isinstance(tiers, list):
+        for tier in tiers:
+            if isinstance(tier, dict) and isinstance(tier.get("components"), list):
+                components.extend(
+                    item for item in tier["components"] if isinstance(item, dict)
+                )
+    cash = None
+    equity = None
+    currency = None
+    period = None
+    for component in components:
+        kind = str(component.get("compensationType") or "").lower()
+        label = str(component.get("summary") or "").strip() or None
+        if kind == "salary" and cash is None and label:
+            cash = label
+            currency = str(component.get("currencyCode") or "").strip() or None
+            interval = str(component.get("interval") or "").strip().upper()
+            period = _PERIOD_LABELS.get(interval)
+        elif kind in {"equitycashvalue", "equity"} and equity is None and label:
+            equity = label
+    if cash is None and summary:
+        lowered = summary.lower()
+        if not any(word in lowered for word in ("equity", "commission", "offers")):
+            cash = summary
+    return cash, equity, currency, period
+
 
 class AshbyAdapter(SourceAdapter):
     kind = "ats_ashby"
@@ -81,6 +123,7 @@ class AshbyAdapter(SourceAdapter):
             summary = None
             if isinstance(compensation, dict):
                 summary = compensation.get("compensationTierSummary") or compensation.get("summary")
+            cash, equity, currency, period = _ashby_compensation(compensation, summary)
             official_url = job.get("jobUrl") or job.get("applyUrl")
             if not official_url:
                 continue
@@ -105,7 +148,10 @@ class AshbyAdapter(SourceAdapter):
                 compensation=CompensationDTO(
                     raw=str(compensation) if compensation else None,
                     summary=str(summary) if summary else None,
-                    cash=str(summary) if summary else None,
+                    cash=cash,
+                    equity=equity,
+                    currency=currency,
+                    period=period,
                 ),
                 published_at=parse_datetime(job.get("publishedAt")),
                 source_payload={

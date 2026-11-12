@@ -37,7 +37,7 @@ async def _seed_opportunities(session: AsyncSession, monkeypatch) -> dict[str, O
     candidates = [
         make_candidate(
             external_id="exact",
-            title="=CMD() exact deadline role",
+            title="=CMD() Backend Engineer exact deadline",
             deadline_on=(now + timedelta(days=5)).date(),
             deadline_at=now + timedelta(days=5),
             deadline_precision=DeadlinePrecision.exact,
@@ -45,13 +45,13 @@ async def _seed_opportunities(session: AsyncSession, monkeypatch) -> dict[str, O
         ),
         make_candidate(
             external_id="date-only",
-            title="Date-only deadline role",
+            title="Backend Engineer, date-only deadline",
             deadline_on=(now + timedelta(days=10)).date(),
             deadline_precision=DeadlinePrecision.date_only,
         ),
         make_candidate(
             external_id="month-only",
-            title="Month-only deadline role",
+            title="Backend Engineer, month-only deadline",
             deadline_on=(now.date().replace(day=1) + timedelta(days=32)).replace(day=1),
             deadline_precision=DeadlinePrecision.month_only,
         ),
@@ -72,9 +72,9 @@ async def test_deadlines_and_calendar_do_not_invent_times(
     client: httpx.AsyncClient, session: AsyncSession, monkeypatch
 ) -> None:
     seeded = await _seed_opportunities(session, monkeypatch)
-    date_only = seeded["Date-only deadline role"]
-    exact = seeded["=CMD() exact deadline role"]
-    month_only = seeded["Month-only deadline role"]
+    date_only = seeded["Backend Engineer, date-only deadline"]
+    exact = seeded["=CMD() Backend Engineer exact deadline"]
+    month_only = seeded["Backend Engineer, month-only deadline"]
 
     deadlines = await client.get("/v1/deadlines")
     assert deadlines.status_code == 200
@@ -94,8 +94,8 @@ async def test_deadlines_and_calendar_do_not_invent_times(
     assert f"DTSTART;VALUE=DATE:{date_only.deadline_on:%Y%m%d}" in ics
     assert "DTSTART;VALUE=DATE:" in ics
     assert "cutoff time not published" in ics
-    assert "Month-only deadline role" not in ics
-    assert "exact deadline role" in ics
+    assert "Backend Engineer, month-only deadline" not in ics
+    assert "Backend Engineer exact deadline" in ics
     year_month = month_only.deadline_on.strftime("%Y%m%d")
     assert year_month not in ics
 
@@ -105,7 +105,7 @@ async def test_csv_brief_digest_flow_is_idempotent_and_audited(
     client: httpx.AsyncClient, session: AsyncSession, monkeypatch
 ) -> None:
     seeded = await _seed_opportunities(session, monkeypatch)
-    opportunity = seeded["=CMD() exact deadline role"]
+    opportunity = seeded["=CMD() Backend Engineer exact deadline"]
 
     csv_response = await client.get("/v1/export/opportunities.csv")
     assert csv_response.status_code == 200
@@ -169,7 +169,7 @@ async def test_digest_excludes_fixtures_and_ignores_demo_window(
     client: httpx.AsyncClient, session: AsyncSession, monkeypatch
 ) -> None:
     seeded = await _seed_opportunities(session, monkeypatch)
-    fixture = seeded["Month-only deadline role"]
+    fixture = seeded["Backend Engineer, month-only deadline"]
     fixture.is_fixture = True
     start, end = digest_window(DigestKind.daily)
     demo = Digest(
