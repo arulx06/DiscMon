@@ -1,5 +1,104 @@
 # Changelog
 
+## 2026-11-12 — Task 1: fail-closed PostgreSQL test isolation
+
+### Bounded change
+
+- `services/api/tests/conftest.py`: remove fallback test configuration; parse
+  explicit matching URLs with SQLAlchemy; require exact test environment,
+  PostgreSQL/psycopg, explicit user, valid port, `*_test` database and loopback or
+  approved local socket. Reject routing/options query parameters (except an
+  approved socket `host`), duplicate socket hosts, inherited libpq `PG*` variables
+  and ambiguous environment casing. Validate effective settings before importing
+  the engine, including stale cached configuration.
+- Before each existing `TRUNCATE ... RESTART IDENTITY CASCADE`, validate
+  `current_database()`, `current_user`, `session_user` and the same raw psycopg
+  connection's database, user, client host/port and resolved address. Do not
+  compare a container's server-side address/port to the host's mapped CI port.
+  No fixture scope, cleanup semantics, schema, migration, application or frontend
+  changes. No bypass flag.
+- `services/api/tests/test_database_safety.py`: standalone unittest/pure guard,
+  collection-only subprocess and mocked cleanup-order tests; no live database
+  needed. `README.md`: explicit destructive-fixture warning, Bash/Ubuntu and
+  retained PowerShell instructions with placeholders and both required URLs.
+
+### Execution evidence
+
+Baseline `665f2380bcc24a62acdef91bd9e361b563406b91`, new branch
+`hoplite/m0-test-db-safety-20261113`; separate worktree preserves the older clean
+Hoplite checkout. Python 3.12.3. Dependency installation used a worktree-local
+ignored virtualenv (`uv venv .venv --python 3.12` and
+`uv pip install --python .venv/bin/python -e 'services/api[dev]'`, exit 0).
+
+From `services/api`, final checks:
+
+```text
+../../.venv/bin/python -m ruff check app tests scripts
+All checks passed!
+exit 0
+
+../../.venv/bin/python -m mypy app scripts
+Success: no issues found in 61 source files
+exit 0
+
+../../.venv/bin/python -m unittest discover -s tests -p test_database_safety.py -v
+Ran 10 tests in 21.340s
+OK
+exit 0; no warnings
+
+git diff --check
+(no output)
+exit 0
+```
+
+The initial root-directory mypy invocation did not load the API's existing
+pyproject settings and reported a feedparser missing-stubs error (exit 1).
+Running the required existing scope from `services/api` passes unchanged; no
+mypy configuration or coverage was weakened. Formatting/lint findings during
+implementation were corrected before the final checks above.
+
+Safety coverage includes 47 invalid environment/URL cases: missing variables,
+non-test environments, canonical `discmon` and ambiguous database names,
+different database/user/password/host/port, remote/multi-host targets, absent
+host, invalid port, unsupported driver/malformed URL, host/hostaddr/port/service/
+dbname/user/options overrides, duplicate hosts, unapproved/traversing sockets,
+libpq environment routing and ambiguous variable casing. Each subprocess runs:
+`pytest.main(['--collect-only', '-q', 'tests/test_database_safety.py'])`, with
+`sqlalchemy.ext.asyncio.create_async_engine` replaced by a failing sentinel.
+All 47 exit nonzero with a fixed safety message, without reaching engine creation
+or echoing the dummy password/full URL. An additional stale-cached-settings
+subprocess has the same assertions. Accepted CI loopback and approved socket
+collection-only subprocesses exit 0, without opening a connection. Pure tests
+also cover IPv6, implicit/explicit default port equality, actual database/role/
+endpoint mismatches, localhost resolution and unavailable resolved addresses.
+The mocked fixture executes one identity SELECT and no TRUNCATE on mismatch;
+only its accepted path reaches the unchanged TRUNCATE on the same connection.
+
+### Remaining verification / safety boundary
+
+Local full backend integration is **BLOCKED**, not attempted: a presence-only
+Python `os.environ.get` probe reported `APP_ENV explicitly supplied: False`,
+`DATABASE_URL explicitly supplied: False`, `TEST_DATABASE_URL explicitly supplied:
+False` (exit 0). No independently verified disposable database with the existing
+schema was provided; Task 1 prohibits manual schema migrations without separate
+authorization. Installed PostgreSQL tooling alone does not establish a safe
+target. No real local database identity is claimed. All local SQL was mocked;
+only synthetic endpoints/dummy credentials were used for negative cases. No
+production connections, `.env`/secret/backup reads, data changes, container
+restarts or manual migrations occurred.
+
+Automatic PostgreSQL 18 push/PR CI is pending publication; no workflow was
+manually triggered/rerun. Fresh local Compose acceptance remains incomplete.
+The guard verifies configuration/identity, not ownership or disposability: an
+operator must still independently provision/verify the test database. A local
+proxy cannot be distinguished from a direct listener by these identity checks.
+Generated virtualenv, egg-info, bytecode and tool caches are ignored/excluded;
+execution logs and helper scripts remain outside the checkout. Only the guard,
+its regressions and these three documentation files belong to the checkpoint.
+Recommendation at this pre-CI checkpoint: ready for review with local integration
+and fresh Compose limitations explicitly open; no acceptance claim.
+
+
 ## 2026-11-12
 
 ### Stabilization checkpoint
