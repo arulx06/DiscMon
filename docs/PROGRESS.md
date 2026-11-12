@@ -3,6 +3,53 @@
 Dates: 2026-10-30 (historical status) and 2026-11-12 (stabilization checkpoint)
 Authority: docs/specification.md
 
+## 2026-11-12 Task 1 — fail-closed PostgreSQL test isolation
+
+- Exact starting checkpoint: `665f2380bcc24a62acdef91bd9e361b563406b91`, from
+  `handoff/stabilize-idfc-audit-20261112`; feature branch
+  `hoplite/m0-test-db-safety-20261113` in a separate worktree. The older original
+  workspace was left clean and unchanged.
+- Guard now requires explicit `APP_ENV=test` and matching database URLs before
+  importing the application database engine; validates effective cached settings
+  too. Only explicit local psycopg/PostgreSQL `*_test` targets are accepted.
+  Unapproved query routing, inherited `PG*`, ambiguous environment casing and
+  credential-bearing diagnostic output are rejected.
+- Immediately before the unchanged per-test truncation, the same connection's
+  SQL database/effective/authenticated identity, driver database/user/client
+  endpoint and resolved loopback address are checked. Socket paths are explicitly
+  allowlisted. Client endpoint checks preserve Docker's 55432-to-5432 CI mapping.
+- Python 3.12.3, from `services/api` (all exit 0):
+  - `../../.venv/bin/python -m ruff check app tests scripts` — `All checks passed!`
+  - `../../.venv/bin/python -m mypy app scripts` —
+    `Success: no issues found in 61 source files`.
+  - `../../.venv/bin/python -m unittest discover -s tests -p test_database_safety.py -v`
+    — `Ran 10 tests in 21.340s`, `OK`, no warnings. Includes 47 unsafe
+    collection subprocesses plus a cached-settings case, all rejected before an
+    engine-creation sentinel; CI/socket collection succeeds without connecting.
+  - `git diff --check` — exit 0, no output.
+- Local full backend integration: **BLOCKED**, not executed. The environment
+  presence probe returned `False` for `APP_ENV`, `DATABASE_URL` and
+  `TEST_DATABASE_URL`; no independently verified disposable database with the
+  existing schema was supplied. No manual migrations/schema provisioning were
+  performed, per Task 1. All local SQL execution was mocked; no PostgreSQL server
+  or production application service was contacted. No `.env`, secrets, backups,
+  existing databases or volumes were accessed or modified.
+- Automatic CI for implementation commit `8e49cb0` **passed** on PostgreSQL
+  **18.6** / Python 3.12.16: `pytest tests -q` —
+  `111 passed, 1 warning in 26.25s` (exit 0; existing feedparser deprecation).
+  Ruff, mypy and web typecheck/lint/build also passed. The ephemeral CI service
+  supplied `discmon_test`, authenticated/effective user `discmon`, client
+  `localhost:55432`; every fixture's actual identity/endpoint checks passed.
+  Push run: https://github.com/arulx06/DiscMon/actions/runs/43313987678
+  PR run: https://github.com/arulx06/DiscMon/actions/runs/43314034490
+  Both backend/web jobs succeeded on both runs. No manual dispatch/rerun.
+- PR https://github.com/arulx06/DiscMon/pull/1 targets the handoff branch, remains
+  unmerged, update monitoring enabled, auto-merge disabled. Only the five scoped
+  files changed. Final `git diff --check` passed; generated files/logs excluded.
+  Recommendation: **READY FOR REVIEW**, not supervisory acceptance. Fresh local
+  Compose acceptance and local integration remain open; M0 is not declared accepted.
+- Full commands, safety coverage and limitations: `docs/changelog.md`, Task 1.
+
 ## 2026-11-12 stabilization checkpoint
 
 - Handoff branch: `handoff/stabilize-idfc-audit-20261112`.
