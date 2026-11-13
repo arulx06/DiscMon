@@ -4,7 +4,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
         case_sensitive=False,
     )
 
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://discmon:discmon@127.0.0.1:55432/discmon"
     owner_auth_mode: str = "disabled"
     owner_api_token: str = "dev-owner-token"
+    runtime_sync_token: str | None = None
     session_secret: str = "dev-session-secret-change-me"
     allowed_origins: str = "http://localhost:3000"
     log_level: str = "INFO"
@@ -72,6 +74,23 @@ class Settings(BaseSettings):
         if normalized not in {"development", "test", "production", "staging"}:
             raise ValueError("APP_ENV must be development, test, staging or production")
         return normalized
+
+    @field_validator("runtime_sync_token")
+    @classmethod
+    def validate_runtime_sync_token(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", value):
+            raise ValueError(
+                "RUNTIME_SYNC_TOKEN must match [A-Za-z0-9_-]{32,256}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def keep_runtime_token_separate(self) -> Settings:
+        if self.runtime_sync_token and self.runtime_sync_token == self.owner_api_token:
+            raise ValueError("RUNTIME_SYNC_TOKEN must differ from OWNER_API_TOKEN")
+        return self
 
     @property
     def is_local(self) -> bool:

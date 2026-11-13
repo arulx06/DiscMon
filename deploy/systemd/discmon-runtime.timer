@@ -1,5 +1,5 @@
 [Unit]
-Description=DiscMon 09:00–21:00 Kolkata runtime reconciliation
+Description=DiscMon saved Kolkata runtime reconciliation
 
 [Timer]
 OnCalendar=*-*-* *:*:00 Asia/Kolkata
