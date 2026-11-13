@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -24,7 +24,7 @@ class StaticHTMLAdapter(SourceAdapter):
     supports_closure = False
 
     def allowed_hosts(self, source: SourceConfig) -> set[str]:
-        return {domain_of(source.root_url) or ""}
+        return {(urlsplit(source.root_url).hostname or "").lower()}
 
     async def fetch(
         self, source: SourceConfig, fetcher: SafeFetcher, cursor: str | None = None

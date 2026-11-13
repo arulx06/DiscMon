@@ -1,0 +1,28 @@
+{
+  "fetched_on": "2026-11-13",
+  "license": "CC-BY-SA-4.0",
+  "pages": {
+    "directory": {
+      "url": "https://www.mediawiki.org/wiki/Outreach_programs",
+      "status": 200,
+      "headers": {
+        "date": "Fri, 13 Nov 2026 11:40:26 GMT",
+        "last-modified": "Fri, 30 Oct 2026 11:40:26 GMT",
+        "content-type": "text/html; charset=UTF-8"
+      },
+      "response_sha256": "bdab3d7704ccac1ea175fb9259050a623462a312600b73cec60d9847fd382ff3",
+      "fixture_sha256": "ee67193a3bb05e2d4a3a20c0e43e843842e60d8db2212aa23280d705d98e6c9d"
+    },
+    "programme": {
+      "url": "https://www.mediawiki.org/wiki/Outreachy",
+      "status": 200,
+      "headers": {
+        "date": "Fri, 13 Nov 2026 11:40:27 GMT",
+        "last-modified": "Fri, 30 Oct 2026 11:40:27 GMT",
+        "content-type": "text/html; charset=UTF-8"
+      },
+      "response_sha256": "66c2ac9ee62be589be1cba48ff0b7ee74e98cb660e6d8b1303d50cdf4a7d2f1a",
+      "fixture_sha256": "5512bce4ddd0735c2417052f2e47236642704aa33a5ff581eb483be4421c8563"
+    }
+  }
+}

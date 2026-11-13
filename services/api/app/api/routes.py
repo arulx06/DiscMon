@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -61,7 +62,7 @@ from app.services.exports import (
 from app.services.queue import enqueue_job, enqueue_source_job, queued_depth
 from app.services.sheets import enqueue_sheet_upsert
 from app.services.time import days_until, now_utc
-from app.services.urls import canonicalize_url, domain_of, is_http_url
+from app.services.urls import canonicalize_url, is_http_url
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(require_owner)])
 
@@ -980,7 +981,7 @@ def _source_summary(source: Source, last_run: SourceRun | None = None) -> dict:
 async def _validate_source_root(root_url: str) -> None:
     if not is_http_url(root_url):
         raise HTTPException(status_code=400, detail="Source root URL must be http(s)")
-    host = domain_of(root_url)
+    host = (urlsplit(root_url).hostname or "").lower()
     if not host:
         raise HTTPException(status_code=400, detail="Source root URL must include a host")
     try:
