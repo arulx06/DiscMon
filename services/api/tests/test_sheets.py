@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -305,6 +305,284 @@ async def test_sheets_header_write_failure_closes_gateway_and_marks_outbox_faile
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("omit_values", [False, True])
+async def test_sheets_empty_sheet_initializes_header_before_appending(
+    session: AsyncSession, monkeypatch, omit_values: bool
+) -> None:
+    outbox_rows = await _enqueue_opportunities(session, monkeypatch)
+    settings = _settings()
+    remote_rows: list[list[str]] = []
+    written_header: list[list[str]] = []
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            payload = {} if omit_values else {"values": remote_rows}
+            return httpx.Response(200, json=payload, request=request)
+        payload = json.loads(request.read())
+        if request.method == "PUT":
+            written_header.extend(payload["values"])
+            remote_rows.extend(payload["values"])
+            return httpx.Response(200, json={}, request=request)
+        assert request.method == "POST"
+        remote_rows.extend(payload["values"])
+        return httpx.Response(
+            200,
+            json={"updates": {"updatedRange": "Opportunities!A2:Q2"}},
+            request=request,
+        )
+
+    gateway, requests, _ = _mock_gateway(monkeypatch, settings, transport)
+    monkeypatch.setattr(sheets, "get_settings", lambda: settings)
+
+    result = await sheets.process_sheets_outbox(session)
+    await session.commit()
+
+    assert [request.method for request in requests] == ["GET", "PUT", "POST"]
+    assert written_header == [sheets.SHEET_HEADERS]
+    assert remote_rows[0] == sheets.SHEET_HEADERS
+    assert remote_rows[1][0] == str(outbox_rows[0].entity_id)
+    assert result["synced"] == 1
+    assert outbox_rows[0].status == SyncStatus.synced
+    assert gateway.client.is_closed
+
+
+@pytest.mark.integration
+async def test_sheets_valid_ragged_rows_preserve_physical_row_numbers(
+    session: AsyncSession, monkeypatch
+) -> None:
+    outbox_rows = await _enqueue_opportunities(session, monkeypatch)
+    settings = _settings()
+    remote_rows: list[list[object]] = [
+        list(sheets.SHEET_HEADERS),
+        [],
+        ["", ""],
+        ["another-opportunity"],
+        [str(outbox_rows[0].entity_id)],
+    ]
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"values": remote_rows}, request=request)
+        assert request.method == "PUT"
+        assert request.url.path.endswith("/Opportunities!A5:Q5")
+        return httpx.Response(200, json={}, request=request)
+
+    gateway, requests, _ = _mock_gateway(monkeypatch, settings, transport)
+    monkeypatch.setattr(sheets, "get_settings", lambda: settings)
+
+    result = await sheets.process_sheets_outbox(session)
+    await session.commit()
+
+    assert [request.method for request in requests] == ["GET", "PUT"]
+    assert result["synced"] == 1
+    assert outbox_rows[0].status == SyncStatus.synced
+    assert gateway.client.is_closed
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "reordered_header",
+        "wrong_header",
+        "missing_header",
+        "malformed_json",
+        "unexpected_response_type",
+        "error_payload",
+        "unknown_response_field",
+        "invalid_range_metadata",
+        "wrong_major_dimension",
+        "unexpected_values_type",
+        "malformed_row",
+        "malformed_cell",
+        "null_cell",
+        "row_wider_than_header",
+        "duplicate_id",
+    ],
+)
+async def test_sheets_invalid_remote_layout_fails_selected_batch_without_writes(
+    session: AsyncSession, monkeypatch, layout: str
+) -> None:
+    outbox_rows = await _enqueue_opportunities(session, monkeypatch, count=2)
+    settings = _settings()
+    before = {
+        model: await _canonical_snapshot(session, model)
+        for model in (Opportunity, Assessment, Review)
+    }
+    opportunity_id = str(outbox_rows[0].entity_id)
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        if layout == "malformed_json":
+            return httpx.Response(200, content=b"{malformed", request=request)
+        if layout == "unexpected_response_type":
+            return httpx.Response(200, json=[], request=request)
+        if layout == "error_payload":
+            return httpx.Response(
+                200, json={"error": {"message": "synthetic failure"}}, request=request
+            )
+        if layout == "unknown_response_field":
+            return httpx.Response(
+                200,
+                json={"values": [], "unexpected": "synthetic"},
+                request=request,
+            )
+        if layout == "invalid_range_metadata":
+            return httpx.Response(
+                200, json={"range": 42, "values": []}, request=request
+            )
+        if layout == "wrong_major_dimension":
+            return httpx.Response(
+                200,
+                json={"majorDimension": "COLUMNS", "values": []},
+                request=request,
+            )
+        if layout == "unexpected_values_type":
+            return httpx.Response(200, json={"values": "not rows"}, request=request)
+
+        if layout == "reordered_header":
+            reordered = list(sheets.SHEET_HEADERS)
+            reordered[:2] = reversed(reordered[:2])
+            values: object = [reordered, [opportunity_id]]
+        elif layout == "wrong_header":
+            values = [[*sheets.SHEET_HEADERS[:-1], "Unrecognized column"], [opportunity_id]]
+        elif layout == "missing_header":
+            values = [[opportunity_id]]
+        elif layout == "malformed_row":
+            values = [list(sheets.SHEET_HEADERS), {"id": opportunity_id}]
+        elif layout == "malformed_cell":
+            values = [list(sheets.SHEET_HEADERS), [opportunity_id, {"nested": "cell"}]]
+        elif layout == "null_cell":
+            values = [list(sheets.SHEET_HEADERS), [opportunity_id, None]]
+        elif layout == "row_wider_than_header":
+            too_wide_row = [opportunity_id, *(["extra"] * len(sheets.SHEET_HEADERS))]
+            values = [list(sheets.SHEET_HEADERS), too_wide_row]
+        else:
+            assert layout == "duplicate_id"
+            values = [
+                list(sheets.SHEET_HEADERS),
+                [opportunity_id],
+                [opportunity_id, "duplicate"],
+            ]
+        return httpx.Response(200, json={"values": values}, request=request)
+
+    gateway, requests, _ = _mock_gateway(monkeypatch, settings, transport)
+    monkeypatch.setattr(sheets, "get_settings", lambda: settings)
+
+    result = await sheets.process_sheets_outbox(session, limit=1)
+    await session.commit()
+
+    assert [request.method for request in requests] == ["GET"]
+    requested_range = requests[0].url.path.rsplit("/", 1)[-1].replace("%27", "'")
+    assert requested_range == "'Opportunities'"
+    assert requests[0].url.params["majorDimension"] == "ROWS"
+    assert result["failed"] == 1
+    assert result["synced"] == 0
+    assert outbox_rows[0].status == SyncStatus.failed
+    assert outbox_rows[0].retries == 1
+    assert outbox_rows[0].last_attempt_at is not None
+    _assert_sanitized_sync_error(outbox_rows[0].last_error)
+    assert outbox_rows[1].status == SyncStatus.pending
+    assert outbox_rows[1].retries == 0
+    assert outbox_rows[1].last_attempt_at is None
+    status = await sheets.sheets_status(session)
+    assert status["counts"][SyncStatus.failed.value] == 1
+    _assert_sanitized_sync_error(status["last_error"])
+    assert {
+        model: await _canonical_snapshot(session, model)
+        for model in (Opportunity, Assessment, Review)
+    } == before
+    assert gateway.client.is_closed
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("failed_index", [0, 1])
+async def test_sheets_mixed_batch_errors_survive_success_exhaustion_and_recovery(
+    session: AsyncSession, monkeypatch, failed_index: int
+) -> None:
+    outbox_rows = await _enqueue_opportunities(session, monkeypatch, count=2)
+    settings = _settings()
+    failed_row = outbox_rows[failed_index]
+    for index, row in enumerate(outbox_rows):
+        row.created_at = datetime(2024, 1, 1, tzinfo=UTC) + timedelta(seconds=index)
+    await session.commit()
+    failed_id = str(failed_row.entity_id)
+    failures_remaining = 1
+    remote_rows: list[list[object]] = [list(sheets.SHEET_HEADERS)]
+
+    async def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal failures_remaining
+        if request.method == "GET":
+            return httpx.Response(200, json={"values": remote_rows}, request=request)
+        assert request.method == "POST"
+        payload = json.loads(request.read())
+        values = payload["values"][0]
+        if values[0] == failed_id and failures_remaining:
+            failures_remaining -= 1
+            return httpx.Response(503, text="private response detail", request=request)
+        remote_rows.append(values)
+        row_number = len(remote_rows)
+        return httpx.Response(
+            200,
+            json={"updates": {"updatedRange": f"Opportunities!A{row_number}:Q{row_number}"}},
+            request=request,
+        )
+
+    _, requests, gateways = _mock_gateway(monkeypatch, settings, transport)
+    monkeypatch.setattr(sheets, "get_settings", lambda: settings)
+
+    mixed = await sheets.process_sheets_outbox(session)
+    await session.commit()
+
+    successful_row = outbox_rows[1 - failed_index]
+    assert mixed["failed"] == mixed["synced"] == 1
+    assert [
+        json.loads(request.read())["values"][0][0]
+        for request in requests if request.method == "POST"
+    ] == [str(row.entity_id) for row in outbox_rows]
+    assert failed_row.status == SyncStatus.failed
+    assert failed_row.retries == 1
+    assert failed_row.last_attempt_at is not None
+    _assert_sanitized_sync_error(failed_row.last_error, 503)
+    assert successful_row.status == SyncStatus.synced
+    assert successful_row.last_attempt_at is not None
+    assert successful_row.last_error is None
+    state = await session.scalar(select(SyncState))
+    assert state is not None
+    _assert_sanitized_sync_error(state.last_error, 503)
+    assert state.remote_row_key is not None
+    assert state.last_success_at is not None
+    mixed_success_at = state.last_success_at
+    mixed_row_key = state.remote_row_key
+    failed_attempt_at = failed_row.last_attempt_at
+    successful_attempt_at = successful_row.last_attempt_at
+
+    failed_row.retries = sheets.MAX_SYNC_ATTEMPTS
+    await session.commit()
+    no_work = await sheets.process_sheets_outbox(session)
+    await session.commit()
+    assert no_work["synced"] == no_work["failed"] == 0
+    status = await sheets.sheets_status(session)
+    _assert_sanitized_sync_error(status["last_error"], 503)
+    assert state.last_success_at == mixed_success_at
+    assert state.remote_row_key == mixed_row_key
+    assert failed_row.last_attempt_at == failed_attempt_at
+
+    await sheets.enqueue_sheet_upsert(session, failed_row.entity_id)
+    recovered = await sheets.process_sheets_outbox(session)
+    await session.commit()
+    assert recovered["synced"] == 1
+    assert failed_row.status == SyncStatus.synced
+    assert failed_row.last_error is None
+    status = await sheets.sheets_status(session)
+    assert status["last_error"] is None
+    assert status["last_success_at"] is not None
+    assert state.last_success_at > mixed_success_at
+    assert successful_row.last_attempt_at == successful_attempt_at
+    assert all(gateway.client.is_closed for gateway in gateways)
+
+
+@pytest.mark.integration
 async def test_sheets_recovery_writes_header_once_and_reenqueued_upsert_updates_row(
     session: AsyncSession, monkeypatch
 ) -> None:
@@ -428,6 +706,15 @@ async def test_sheets_retry_and_selection_limits_are_respected(
         row.status == SyncStatus.failed and row.retries == sheets.MAX_SYNC_ATTEMPTS
         for row in exhausted_rows
     )
+    state = await session.scalar(select(SyncState))
+    assert state is not None
+    _assert_sanitized_sync_error(state.last_error)
+    assert state.last_success_at is not None
+    # Status must recover an error even if older state incorrectly says all clear.
+    state.last_error = None
+    await session.commit()
+    status = await sheets.sheets_status(session)
+    _assert_sanitized_sync_error(status["last_error"])
     no_retry = await sheets.process_sheets_outbox(session, limit=1)
     assert no_retry["synced"] == no_retry["failed"] == 0
     assert request_count == 3

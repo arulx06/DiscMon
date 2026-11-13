@@ -1,5 +1,51 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 9 Sheets mirror integrity and mixed-batch errors
+
+- Required base verified as `c9b6555` on
+  `handoff/stabilize-idfc-audit-20261112`. **M5 remains PARTIAL.**
+- Read the entire quoted tracker tab before writes, so unexpected content after
+  column Q cannot be mistaken for an empty sheet. Validate the ValueRange
+  envelope, row/cell structures, exact ordered headers and unique nonempty
+  opportunity IDs. Only an empty tracker receives the existing approved header;
+  no automatic header repair, row deletion or deduplication. Short rows and
+  blank physical rows remain valid without renumbering updates.
+- Invalid remote data uses Task 8's sanitized selected-batch failure handling,
+  retaining bounded retries and canonical PostgreSQL records. Success reconciles
+  against unresolved failed outbox rows, including retry-exhausted rows; status
+  also checks the outbox rather than trusting stale all-clear state. Successful
+  timestamps/row keys survive failures, and genuine recovery clears the error.
+  No schema, dependency, frontend or collector changes.
+- Added deterministic real-gateway HTTP regressions using `httpx.MockTransport`
+  and dummy tokens: empty and omitted-values initialization, correct/ragged
+  trackers with blank rows, reordered/wrong/missing headers, malformed JSON,
+  unexpected response/value/row/cell types, invalid metadata, extra columns,
+  duplicate IDs, no invalid-sheet writes, selected-only sanitized failures and
+  canonical snapshots. Mixed-batch tests exercise both operation orders,
+  exhaustion, stale status, preserved attempt/success metadata and recovery.
+  Existing idempotent upsert and discovery lost-acknowledgement tests pass.
+- Before migrations/tests, an independent SQL check proved a newly initialized,
+  thread-owned PostgreSQL **16.15** instance: database `discmon_task9_test`,
+  owner/current/session user `task9`, loopback endpoint **127.0.0.1:55439** and
+  dedicated disposable data directory. The guarded command wrapper rechecks
+  identity, ownership and endpoint; existing fail-closed test guards are intact.
+  Only this disposable database was migrated/tested.
+- Actual final local results from `services/api`, with explicit matching test
+  database URLs and `APP_ENV=test`:
+  - `python -m pytest tests/test_sheets.py tests/test_discovery_to_sheets.py -q`:
+    **34 passed in 3.26s**.
+  - `python -m pytest tests -q`: **167 passed, 1 warning in 28.92s**
+    (existing feedparser deprecation).
+  - `python -m ruff check app tests scripts`: **All checks passed!**
+  - `python -m mypy app scripts`: **Success: no issues found in 61 source files**.
+  - `git diff --check`: **exit 0**.
+- Final-head GitHub CI (backend, web and Compose preflight/smoke) is recorded on
+  the single Task 9 PR. Local PostgreSQL 16 results are not PostgreSQL 18 CI
+  proof. Sheets HTTP responses are emulated, not live Google acceptance.
+  No production database, live Google credentials/requests, production ingestion,
+  deployments, backup changes or production restarts were used. Live external
+  integration acceptance remains outstanding; no merge or Task 10 is authorized.
+
 ## 2026-11-13 — Task 8 Sheets outbox failure recovery
 
 - Verified required base `63bb3fc` on `handoff/stabilize-idfc-audit-20261112`;

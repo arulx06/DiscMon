@@ -48,6 +48,31 @@ class SheetsConfigurationError(RuntimeError):
     pass
 
 
+def _sheet_row_lookup(rows: object) -> dict[str, int]:
+    if not isinstance(rows, list):
+        raise SheetsConfigurationError("Invalid Google Sheets rows")
+    for row in rows:
+        if (
+            not isinstance(row, list)
+            or len(row) > len(SHEET_HEADERS)
+            or any(not isinstance(cell, (str, int, float, bool)) for cell in row)
+        ):
+            raise SheetsConfigurationError("Invalid Google Sheets row")
+    if not rows:
+        return {}
+    if rows[0] != SHEET_HEADERS:
+        raise SheetsConfigurationError("Incompatible Google Sheets header")
+    lookup: dict[str, int] = {}
+    for index, row in enumerate(rows[1:], start=2):
+        if not row or row[0] == "":
+            continue
+        identifier = row[0]
+        if not isinstance(identifier, str) or identifier in lookup:
+            raise SheetsConfigurationError("Invalid or duplicate Google Sheets opportunity ID")
+        lookup[identifier] = index
+    return lookup
+
+
 class SheetsGateway:
     def __init__(self, settings: Settings, token: str, client: httpx.AsyncClient) -> None:
         self.settings = settings
@@ -88,16 +113,26 @@ class SheetsGateway:
         return {"Authorization": f"Bearer {self.token}"}
 
     async def rows(self) -> list[list[object]]:
+        # Content beyond Q must not make an unknown layout look empty.
         response = await self.client.get(
-            self._url(f"{self.tab}!{SHEET_RANGE}"),
+            self._url(f"'{self.tab}'"),
             headers=self._headers,
             params={"majorDimension": "ROWS"},
         )
         if response.status_code == 404:
             raise SheetsConfigurationError("Google Sheets spreadsheet was not found")
         response.raise_for_status()
-        values = response.json().get("values")
-        return values if isinstance(values, list) else []
+        payload = response.json()
+        if (
+            not isinstance(payload, dict)
+            or payload.keys() - {"range", "majorDimension", "values"}
+            or ("range" in payload and not isinstance(payload["range"], str))
+            or payload.get("majorDimension", "ROWS") != "ROWS"
+        ):
+            raise SheetsConfigurationError("Invalid Google Sheets response")
+        values = payload.get("values", [])
+        _sheet_row_lookup(values)
+        return values
 
     async def write_header(self) -> None:
         response = await self.client.put(
@@ -251,8 +286,24 @@ async def _record_sync_state(
     if error is None:
         state.remote_row_key = remote_row_key
         state.last_success_at = now_utc()
-    state.last_error = error
     await session.flush()
+    state.last_error = error if error is not None else await _unresolved_sync_error(session)
+    await session.flush()
+
+
+async def _unresolved_sync_error(session: AsyncSession) -> str | None:
+    row = (
+        await session.execute(
+            select(SyncOutbox.last_error)
+            .where(
+                SyncOutbox.entity_type == "opportunity",
+                SyncOutbox.status == SyncStatus.failed,
+            )
+            .order_by(SyncOutbox.last_attempt_at.desc(), SyncOutbox.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    return (row[0] or "Google Sheets sync failed") if row is not None else None
 
 
 async def _record_sync_failure(
@@ -319,17 +370,13 @@ async def process_sheets_outbox(session: AsyncSession, limit: int = 25) -> dict:
         try:
             gateway = await SheetsGateway.create(settings)
             remote_rows = await gateway.rows()
+            row_lookup = _sheet_row_lookup(remote_rows)
             if not remote_rows:
                 await gateway.write_header()
         except Exception as exc:
             await _record_sync_failure(session, settings, rows, exc)
             result["failed"] = len(rows)
             return result
-        row_lookup = {
-            str(row[0]): index
-            for index, row in enumerate(remote_rows[1:], start=2)
-            if row
-        }
         for outbox_row in rows:
             outbox_row.last_attempt_at = now_utc()
             opportunity = await session.get(Opportunity, outbox_row.entity_id)
@@ -337,6 +384,9 @@ async def process_sheets_outbox(session: AsyncSession, limit: int = 25) -> dict:
                 outbox_row.status = SyncStatus.failed
                 outbox_row.retries += 1
                 outbox_row.last_error = "Opportunity no longer exists"
+                await _record_sync_state(
+                    session, settings, None, error=outbox_row.last_error
+                )
                 result["skipped"] += 1
                 continue
             try:
@@ -387,5 +437,7 @@ async def sheets_status(session: AsyncSession) -> dict:
         "last_success_at": (
             state.last_success_at.isoformat() if state and state.last_success_at else None
         ),
-        "last_error": state.last_error if state else None,
+        "last_error": (
+            await _unresolved_sync_error(session) or (state.last_error if state else None)
+        ),
     }
