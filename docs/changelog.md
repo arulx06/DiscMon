@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-11-13 — Task 13 webhook-to-worker material revision regression
+
+- Add two deterministic official-style fellowship HTML fixtures and 16 connected
+  PostgreSQL cases: signed webhook → approved source/watch → queue → real worker
+  processing → safe collection → material revision/evidence → assessment/alerts.
+  Assert all required authentication, approval, URL-authority, failure, precision,
+  eligibility and dedup negatives without replacing application services.
+- Fix two reproduced queue defects only: serialize source enqueue decisions with
+  a source-row `FOR NO KEY UPDATE` lock and replace second-granularity generation
+  keys with UUIDs. Prevent overlapping active jobs and allow genuinely new work
+  immediately after completion. Existing webhook/ingestion architecture unchanged.
+- Final isolated PostgreSQL 18.7 run, all exit 0: focused **16 passed**; combined
+  webhook/queue/ingestion **30 passed**; full backend **184 passed, 1 existing
+  warning**; Ruff clean; mypy clean (**61 files**); `git diff --check` clean.
+  Exact commands, test DB/cluster identity and synthetic before/after records are
+  in [Task 13 execution evidence](task13-execution-evidence.txt) and `PROGRESS.md`.
+  Final-head CI is tracked on the single PR; no historical CI is substituted.
+- Test container/volume removed; no live provider/credentials, external delivery,
+  production state, scheduler or deployment used. **M5 remains PARTIAL**: offline
+  webhook proof is not live provider/delivery or full integration acceptance.
+
 ## 2026-11-13 — Task 12A Google requests transport dependency
 
 - Declare `google-auth[requests]>=2.40,<3.0`, preserving version bounds and the

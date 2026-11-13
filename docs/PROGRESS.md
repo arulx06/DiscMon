@@ -1,5 +1,58 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 13 connected changedetection webhook verification
+
+- Verified the remote handoff baseline at `b739b66`; used a separate worktree
+  and feature branch. **M5 remains PARTIAL.** Task 12's accepted live result is
+  supplied task context, not re-executed or independently revalidated here.
+- Added **16 PostgreSQL integration cases** using the real FastAPI endpoint,
+  source/watch lookup, queue claim, worker `process_job`, changedetection HTML
+  adapter, safe fetcher, ingestion, revisions, evidence, assessment and alert/
+  outbox decisions. Only outbound HTTP transport is substituted. Two committed
+  synthetic HTML versions change a date-only deadline, preserving identity.
+- The connected journey preserves one opportunity: deadline **2099-12-15 →
+  2099-12-22**, two evidence-linked revisions, two pending in-app alerts, one
+  coalesced pending Sheets outbox row. Three unchanged, incomplete scans create
+  no extra revisions/alerts/outbox rows; assessments append (five total).
+  Webhook-supplied facts/URLs never become official evidence or fetch targets.
+- Covered bad signature, absent secret, unknown watch, disabled/unapproved/
+  legally pending sources (including revocation before worker execution),
+  duplicate payload before/after processing, eight concurrent distinct events,
+  queued/running/retry-wait suppression, unknown eligibility despite remote,
+  blocked metadata redirect and three consecutive network/empty-body failures.
+  Failures remain visible without erasure, closure or absence increments.
+- Reproduced two real queue defects before correction: concurrent transactions
+  with different-second keys created duplicate active jobs; completed same-second
+  jobs were incorrectly returned for new work. Minimal queue-only fix serializes
+  each source's active-job decision with PostgreSQL `FOR NO KEY UPDATE` and uses
+  a fresh generation key. No schema, webhook, worker or ingestion rewrite.
+- Fresh disposable PostgreSQL **18.7**: `discmon_task13_20261113_test`, current/
+  session user `discmon`, client **127.0.0.1:55433**, server **172.17.0.2:5432**,
+  cluster **7707683539610767399**, zero initial public tables. `APP_ENV=test`,
+  identical explicit database URLs, no inherited `PG*` or integration credentials;
+  existing fail-closed fixtures unchanged. Migrated to `d4a7c1e9f210` (exit 0).
+- Fresh final local commands from `services/api`, all **exit 0**:
+  - `pytest tests/test_webhook_worker.py -q -s`: **16 passed (2.49s)**.
+  - `pytest tests/test_webhook_worker.py tests/test_discovery_webhook.py tests/test_queue.py tests/test_ingestion_pipeline.py -q`:
+    **30 passed (3.89s)**.
+  - `pytest tests -q`: **184 passed, 1 existing feedparser warning (32.96s)**.
+  - `ruff check app tests scripts`: **All checks passed!**
+  - `mypy app scripts`: **no issues found in 61 source files**.
+  - `git diff --check`: **exit 0**.
+- Sanitized commands, pre-fix failures, before/after record IDs and execution
+  output: [Task 13 evidence](task13-execution-evidence.txt). Final-head GitHub
+  backend/web/Compose results will be recorded on the single review-only PR.
+- Removed only this task's PostgreSQL container and anonymous volume after
+  verification. No production data/backups, real source, provider, notifications,
+  Sheets credentials, scheduler or deployment was touched. Worker processing
+  functions ran explicitly in tests; no worker daemon was started.
+- Remaining M5 scope: live changedetection-provider and opt-in delivery acceptance
+  are not established by this offline regression; optional RSSHub/monthly discovery
+  and wider source/integration acceptance remain outside this proof. M6 soak,
+  crash-recovery/load/memory and coverage/retention audits remain separate. This
+  task does not claim either milestone complete. A complete Hoplite session export
+  is unavailable through the attached tools; the evidence file is not that export.
+
 ## 2026-11-13 — Task 12A Sheets transport dependency and fresh install
 
 - Verified the authoritative remote handoff branch at accepted checkpoint
