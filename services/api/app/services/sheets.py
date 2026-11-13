@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
+from collections.abc import Sequence
 from datetime import date, datetime
 from urllib.parse import quote
 
@@ -233,6 +234,7 @@ async def _record_sync_state(
     session: AsyncSession,
     settings: Settings,
     remote_row_key: str | None,
+    error: str | None = None,
 ) -> None:
     state = await session.scalar(
         select(SyncState).where(
@@ -246,10 +248,30 @@ async def _record_sync_state(
             tab=settings.google_sheets_tab,
         )
         session.add(state)
-    state.remote_row_key = remote_row_key
-    state.last_success_at = now_utc()
-    state.last_error = None
+    if error is None:
+        state.remote_row_key = remote_row_key
+        state.last_success_at = now_utc()
+    state.last_error = error
     await session.flush()
+
+
+async def _record_sync_failure(
+    session: AsyncSession,
+    settings: Settings,
+    rows: Sequence[SyncOutbox],
+    exc: Exception,
+) -> None:
+    # Exception text, URLs and response bodies can contain credentials.
+    error = "Google Sheets sync failed"
+    if isinstance(exc, httpx.HTTPStatusError):
+        error += f" (HTTP {exc.response.status_code})"
+    attempted_at = now_utc()
+    for row in rows:
+        row.status = SyncStatus.failed
+        row.retries += 1
+        row.last_attempt_at = attempted_at
+        row.last_error = error
+    await _record_sync_state(session, settings, None, error=error)
 
 
 async def process_sheets_outbox(session: AsyncSession, limit: int = 25) -> dict:
@@ -292,16 +314,22 @@ async def process_sheets_outbox(session: AsyncSession, limit: int = 25) -> dict:
     }
     if not rows:
         return result
-    gateway = await SheetsGateway.create(settings)
+    gateway = None
     try:
-        remote_rows = await gateway.rows()
+        try:
+            gateway = await SheetsGateway.create(settings)
+            remote_rows = await gateway.rows()
+            if not remote_rows:
+                await gateway.write_header()
+        except Exception as exc:
+            await _record_sync_failure(session, settings, rows, exc)
+            result["failed"] = len(rows)
+            return result
         row_lookup = {
             str(row[0]): index
             for index, row in enumerate(remote_rows[1:], start=2)
             if row
         }
-        if not remote_rows:
-            await gateway.write_header()
         for outbox_row in rows:
             outbox_row.last_attempt_at = now_utc()
             opportunity = await session.get(Opportunity, outbox_row.entity_id)
@@ -327,15 +355,12 @@ async def process_sheets_outbox(session: AsyncSession, limit: int = 25) -> dict:
                 await _record_sync_state(session, settings, remote_row_key)
                 result["synced"] += 1
             except Exception as exc:
-                outbox_row.status = SyncStatus.failed
-                outbox_row.retries += 1
-                outbox_row.last_error = (
-                    f"{type(exc).__name__}: {str(exc)[:500].replace(chr(10), ' ')}"
-                )
+                await _record_sync_failure(session, settings, [outbox_row], exc)
                 result["failed"] += 1
         await session.flush()
     finally:
-        await gateway.close()
+        if gateway is not None:
+            await gateway.close()
     return result
 
 

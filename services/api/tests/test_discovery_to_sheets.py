@@ -185,7 +185,7 @@ async def test_discovery_to_sheets_preserves_gates_and_canonical_records(
     assert failed["failed"] == 1
     assert outbox.status == SyncStatus.failed
     assert outbox.retries == 1
-    assert "synthetic Sheets" in outbox.last_error
+    assert outbox.last_error == "Google Sheets sync failed"
     assert gateway.closed is True
     # Reload committed records, not merely objects retained in the session identity map.
     opportunity_id, revision_id, evidence_id = opportunity.id, revision.id, evidence.id
