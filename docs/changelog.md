@@ -44,7 +44,7 @@ dashboard HTTP 200 (`Radar overview`); ownership-safe cleanup; unchanged Git
 state; and final exit 0.
 
 Evidence: [Retry 5 report](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
-and [independent acceptance](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+and [Retry 5 original command transcript](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
 This records acceptance from supplied evidence, not a rerun. It demonstrates an
 isolated cloud drill only, not production deployment or full outbound network
 isolation. M5 remains **PARTIAL**; the focused fixture-backed connected-flow

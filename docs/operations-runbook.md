@@ -9,7 +9,7 @@ identity was verified before one Alembic upgrade to `d4a7c1e9f210`; all 19
 tables were present with no seeded application records; API live/ready and the
 `Radar overview` dashboard returned HTTP 200; ownership-safe cleanup succeeded;
 Git was unchanged and the final exit was 0. See [Retry 5 evidence](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
-and [independent acceptance](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+and [Retry 5 original command transcript](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
 This is not production deployment or proof of full outbound isolation. M5 is
 still **PARTIAL**. The local fixture-backed connected-flow tests and full
 backend suite passed; CI and live Sheets acceptance are not claimed. Commands

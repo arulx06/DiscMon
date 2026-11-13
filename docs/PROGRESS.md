@@ -32,7 +32,7 @@
   API live/ready and dashboard (`Radar overview`) each HTTP 200; ownership-safe
   cleanup; unchanged Git state; final exit 0.
 - Evidence: [Retry 5 report](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
-  and [independent acceptance](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+  and [Retry 5 original command transcript](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
   This is acceptance of an isolated cloud drill, not a production deployment
   or proof of full outbound network isolation. M0 was recorded from supplied
   evidence; it was not rerun for this documentation update.
