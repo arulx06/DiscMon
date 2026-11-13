@@ -336,3 +336,11 @@ closure candidate; confirmation or a fourth absence produces confirmed closure.
 
 Revoke the token at the provider, rotate `.env`, restart services, inspect audit
 events and logs for redacted-only entries, then document the incident.
+
+## Ubuntu daily operating window (Task 17)
+
+See [09:00–21:00 Asia/Kolkata runtime scheduling](runtime-schedule.md) for
+review-only controller/units, backup locking, owner-approved installation,
+verification and rollback. No live deployment or schedule enablement is claimed.
+Do not use ordinary Compose up/recreate while this schedule is enabled: it can
+restore automatic restart policies and bypass the overnight guard.

@@ -3,6 +3,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Shared with the runtime controller; hold through dump verification/rename.
+exec 9>>.runtime.lock
+if ! flock --exclusive --wait 1500 9; then
+  printf 'Backup failed: runtime lock busy after 25 minutes\n' >&2
+  exit 75
+fi
+
 if [[ -z "${DOCKER_BIN:-}" ]]; then
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     DOCKER_BIN=docker
