@@ -32,11 +32,13 @@ TICK_SECONDS = 30
 IST = ZoneInfo("Asia/Kolkata")
 
 
-def _install_signal_handlers() -> None:
-    global _running
+def _install_signal_handlers(wakeup: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
 
     def stop(*_: object) -> None:
+        global _running
         _running = False
+        loop.call_soon_threadsafe(wakeup.set)
 
     for name in ("SIGINT", "SIGTERM"):
         if hasattr(signal, name):
@@ -158,7 +160,8 @@ async def schedule_once() -> dict:
 
 
 async def run_forever() -> None:
-    _install_signal_handlers()
+    wakeup = asyncio.Event()
+    _install_signal_handlers(wakeup)
     print(json.dumps({"event": "scheduler_started"}), flush=True)
     while _running:
         try:
@@ -180,7 +183,12 @@ async def run_forever() -> None:
                 ),
                 flush=True,
             )
-        await asyncio.sleep(TICK_SECONDS)
+        # Only interrupt the idle wait; the scheduling transaction must finish.
+        if _running:
+            try:
+                await asyncio.wait_for(wakeup.wait(), timeout=TICK_SECONDS)
+            except TimeoutError:
+                pass
     print(json.dumps({"event": "scheduler_stopped"}), flush=True)
 
 

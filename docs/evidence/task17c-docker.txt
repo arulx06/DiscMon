@@ -1,0 +1,104 @@
+Isolated Docker test driver (public test credentials only):
+import json
+import subprocess
+import time
+
+import psycopg
+
+
+def command(*args):
+    print('$ ' + ' '.join(args), flush=True)
+    result = subprocess.run(args, capture_output=True, text=True, check=True)
+    print(result.stdout.strip(), flush=True)
+    if result.stderr:
+        print(result.stderr.strip(), flush=True)
+    return result.stdout.strip()
+
+
+def wait_until(predicate):
+    deadline = time.monotonic() + 15
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise TimeoutError('isolated test readiness condition')
+        time.sleep(0.02)
+
+
+dsn = 'postgresql://discmon:discmon@127.0.0.1:55439/discmon_task17c_container_test'
+with psycopg.connect(dsn, autocommit=True) as observer:
+    for mode in ('idle', 'database-lock'):
+        name = f'discmon-task17c-scheduler-{mode}'
+        holder = psycopg.connect(dsn)
+        if mode == 'database-lock':
+            holder.execute('LOCK TABLE jobs IN ACCESS EXCLUSIVE MODE')
+        command('docker', 'run', '-d', '--name', name,
+                '--network', 'discmon-task17c-isolated',
+                '-e', 'APP_ENV=test', '-e', 'SHEETS_SYNC_ENABLED=false',
+                '-e', 'DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17c_container_test?application_name=task17c-docker',
+                'discmon-task17c-api', 'python', '-m', 'app.scheduler')
+        def database_state():
+            return observer.execute(
+                "SELECT state, wait_event_type FROM pg_stat_activity "
+                "WHERE application_name = 'task17c-docker'"
+            ).fetchall()
+        if mode == 'idle':
+            wait_until(lambda: any(state == 'idle' for state, _ in database_state()))
+        else:
+            wait_until(lambda: any(wait == 'Lock' for _, wait in database_state()))
+        print('Observed DB state:', database_state(), flush=True)
+        started = time.monotonic()
+        print('$ docker stop --time=-1 ' + name, flush=True)
+        stop = subprocess.Popen(['docker', 'stop', '--time=-1', name],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if mode == 'database-lock':
+            time.sleep(0.3)
+            assert stop.poll() is None
+            assert any(wait == 'Lock' for _, wait in database_state())
+            print('Still alive after SIGTERM with transaction waiting; releasing test lock', flush=True)
+            holder.commit()
+        stdout, stderr = stop.communicate(timeout=15)
+        print(stdout.strip(), stderr.strip(), flush=True)
+        print(f'mode={mode} unlimited-stop elapsed={time.monotonic()-started:.3f}s CLI-exit={stop.returncode}', flush=True)
+        assert stop.returncode == 0
+        state = json.loads(command('docker', 'inspect', '--format', '{{json .State}}', name))
+        assert state['ExitCode'] == 0 and not state['OOMKilled'] and not state['Running']
+        logs = command('docker', 'logs', name)
+        assert 'scheduler_stopped' in logs
+        assert 'scheduler_error' not in logs
+        print('queued jobs:', observer.execute('SELECT count(*) FROM jobs WHERE state = %s', ('queued',)).fetchone()[0], flush=True)
+        holder.close()
+        command('docker', 'rm', name)
+--- output: .venv/bin/python /tmp/task17c_docker.py ---
+$ docker run -d --name discmon-task17c-scheduler-idle --network discmon-task17c-isolated -e APP_ENV=test -e SHEETS_SYNC_ENABLED=false -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17c_container_test?application_name=task17c-docker discmon-task17c-api python -m app.scheduler
+dbca0e9610ddc34bdddbd809128c86d22717c0ac35ac25ac44c659f4f770cf94
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+Observed DB state: [('idle', 'Client')]
+$ docker stop --time=-1 discmon-task17c-scheduler-idle
+Flag --time has been deprecated, use --timeout instead
+discmon-task17c-scheduler-idle 
+mode=idle unlimited-stop elapsed=0.209s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17c-scheduler-idle
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T20:56:11.135843092Z","FinishedAt":"2026-11-13T20:56:12.291381924Z"}
+$ docker logs discmon-task17c-scheduler-idle
+{"event": "scheduler_started"}
+{"event": "scheduler_stopped"}
+queued jobs: 1
+$ docker rm discmon-task17c-scheduler-idle
+discmon-task17c-scheduler-idle
+$ docker run -d --name discmon-task17c-scheduler-database-lock --network discmon-task17c-isolated -e APP_ENV=test -e SHEETS_SYNC_ENABLED=false -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17c_container_test?application_name=task17c-docker discmon-task17c-api python -m app.scheduler
+a860b698fe5503faa6467e5adaab26437181b285ad156002ca2c862bb2fbc16b
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+Observed DB state: [('active', 'Lock')]
+$ docker stop --time=-1 discmon-task17c-scheduler-database-lock
+Still alive after SIGTERM with transaction waiting; releasing test lock
+Flag --time has been deprecated, use --timeout instead
+discmon-task17c-scheduler-database-lock 
+mode=database-lock unlimited-stop elapsed=0.499s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17c-scheduler-database-lock
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T20:56:12.476814442Z","FinishedAt":"2026-11-13T20:56:13.922525271Z"}
+$ docker logs discmon-task17c-scheduler-database-lock
+{"event": "scheduler_started"}
+{"event": "scheduler_stopped"}
+queued jobs: 1
+$ docker rm discmon-task17c-scheduler-database-lock
+discmon-task17c-scheduler-database-lock
+driver exit=0
