@@ -48,6 +48,11 @@ def discovery_enabled(source: Source) -> bool:
     return bool(_discovery_config(source).get("enabled"))
 
 
+def discovery_cadence(source: Source) -> str | None:
+    cadence = _discovery_config(source).get("cadence", "weekly")
+    return cadence if isinstance(cadence, str) and cadence in {"weekly", "monthly"} else None
+
+
 def _allowed_domains(source: Source) -> set[str]:
     config = _discovery_config(source)
     raw = config.get("allowed_domains")

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-13 — Task 15 monthly discovery scheduling
+
+- Add explicit `config_json.discovery.cadence="monthly"` without a migration:
+  day 1 at 09:00 Asia/Kolkata, current-month catch-up, source/year/month
+  idempotency. Omitted/explicit weekly cadence preserves Monday/ISO-week behavior.
+  Invalid cadences fail closed with a bounded count in scheduler diagnostics;
+  unrelated scheduler operations continue.
+- Reuse the existing queue/worker/discovery/review path with no changes to queue
+  locking, models, APIs or source authorization. Added 38 scheduling regressions
+  and one connected monthly worker/owner-review scenario, including next-month
+  candidate deduplication, pending legal review, idempotent disabled promotion
+  and failed-scan preservation. Only synthetic HTTP and DNS are intercepted.
+- Fresh isolated PostgreSQL 18.7, empty-schema identity proof before migration;
+  focused **39 passed**, connected discovery/webhook/queue/worker regressions
+  **35 passed**; full backend **258 passed, 1 existing feedparser warning**; Ruff clean, mypy clean (61 files),
+  whitespace check clean. Commands, actual synthetic IDs, timestamps, keys,
+  worker/audit counts and cleanup are recorded in `PROGRESS.md`; final-head
+  backend/web/Compose CI is recorded on the review-only PR.
+- Document weekly defaults, monthly opt-in, IST window/catch-up, idempotency
+  retention, diagnostics and deliberate candidate review. No live provider,
+  delivery, credentials, production state, schema change or deployment.
+  **M5 remains PARTIAL**; no search/AI discovery or M6 work.
+
 ## 2026-11-13 — Task 14 GitHub-watch ingestion and revision verification
 
 - Add two deterministic release fixtures and **35 regressions**: 15 real

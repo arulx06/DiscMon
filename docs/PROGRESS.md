@@ -1,5 +1,102 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 15 monthly discovery scheduling and candidate review
+
+- Remote handoff branch verified at required `1277036`; fresh isolated
+  `hoplite/knosos-3cdfe8a4--task15-monthly` worktree, original checkout preserved.
+  **M5 remains PARTIAL.** Production changes are limited to scheduler cadence
+  selection and a small discovery-config reader. No schema/migration, queue,
+  Task 13 locking, worker, candidate model or API behavior was changed.
+- Omitted cadence remains weekly, Monday 09:00 IST, with unchanged
+  `discover:weekly:<source-id>:<ISO-year>-W<ISO-week>` keys. Explicit `monthly`
+  begins day 1 at 09:00 Asia/Kolkata; first eligible tick catches up within the
+  current month only. Keys use `discover:monthly:<source-id>:<IST-year>-<month>`.
+  Active discovery still suppresses overlap per source. Invalid/null/non-string
+  cadences skip scheduled discovery, increment a bounded count in returned/tick
+  diagnostics, and do not stop approved-source monitoring, alerts or digests.
+- Regressions were added first: baseline `pytest tests/test_discovery_webhook.py
+  tests/test_queue.py -q` passed **4 tests**; the new connected scheduler test
+  then failed at **2026-11-01 09:00 IST** and **2026-11-02 05:30 IST** (zero jobs,
+  expected one), exit 1. After the fix, the **38 scheduler cases** cover before/
+  exact window, repeated ticks, restart after completion, catch-up, UTC/IST month
+  boundaries, December/January, independent sources, weekly coexistence/default,
+  invalid cadence and disabled/unapproved/legal-pending/rejected sources.
+  Queued/running/retry-wait suppress only their source; completion permits catch-up.
+  Actual coexisting legacy key at **2026-11-02 09:00 IST**:
+  `discover:weekly:61724cd5-068d-4f45-a342-8b4898cdcd34:2026-W45`; repeated ticks leave one job.
+- Actual focused acceptance source **`e7fb8e19-6115-4872-9ed3-1551db096ac1`**, synthetic
+  `https://example.org/programmes`, enabled/approved/legally approved, explicit
+  monthly cadence and `example.org` allowlist (including the synthetic partner
+  subdomain). Actual monthly jobs:
+  - **`3d3ea71f-5043-4969-815f-ae74cb98618d`**, key
+    `discover:monthly:e7fb8e19-6115-4872-9ed3-1551db096ac1:2026-11`, available **2026-11-01 03:30 UTC / 09:00 IST**.
+  - **`1366ca60-a1d4-4224-8839-4c75640954c1`**, key
+    `discover:monthly:e7fb8e19-6115-4872-9ed3-1551db096ac1:2026-12`, available **2026-12-01 03:30 UTC / 09:00 IST**.
+  Both go **queued → running → succeeded** through the real queue claim,
+  worker `process_job`, static HTML adapter and discovery service. Other
+  scheduler jobs remain queued/unexecuted. A November 22 repeat leaves one
+  monthly job, including after the first job completed and owner promotion.
+- First worker output: **6 links seen, 2 created, 0 known**; audit additionally
+  records **3 invalid/disallowed** and the tracking duplicate is suppressed.
+  Next month: **7 seen, 1 created, 2 known, 3 invalid**, same duplicate suppressed.
+  Canonical candidates are `https://example.org/programmes/one`,
+  `https://partner.example.org/programmes/two` and, in December,
+  `https://example.org/programmes/new`. All retain originating source provenance;
+  partner/new stay unapproved and all stay legally pending. No opportunities
+  are ingested by discovery. Candidate `7b2e7888-7c12-4317-b50a-da6cb95131a1` rejects unapproved
+  promotion (HTTP 400), then explicit owner approval permits promotion to
+  `6f973403-b2eb-47bd-832b-1825c87e5510` (disabled, approved, legally pending).
+  Repeated promotion returns the same source with `created=false`; December
+  preserves the owner decision and creates no duplicate candidates.
+- January synthetic HTTP 400: job **`d5337b58-7675-44df-b2ce-67b1a27711a3`** goes
+  queued → running → retry_wait; all candidates/owner decisions and existing
+  synthetic opportunity `fc392374-e908-4599-855d-3f2f49449585` are preserved.
+  Actual HTTP requests: exactly three, all intercepted GETs to the synthetic
+  directory. HTTP MockTransport and DNS interception retain real source-root
+  and fetch SSRF checks; no linked domain is fetched. No provider credentials,
+  live newsletters/search/GitHub/changedetection/Sheets, notifications, AI,
+  production resources, worker/scheduler daemons or deployment were used.
+- Fresh PostgreSQL **18.7**, cluster **7707695614031790120**; database
+  `discmon_task15_test`, current/session user `discmon_task15`; client
+  **127.0.0.1:55435**, server **172.17.0.2:5432**, server-observed client
+  **172.17.0.1**. Task-owned container `discmon-task15-run_93c73f0b76424d7a98befff7bfb16607-pg18`
+  (`72d9aa9a424a`) and named volume `discmon-task15-run_93c73f0b76424d7a98befff7bfb16607-pgdata` were
+  created after an empty Docker container/volume inventory. Version, cluster,
+  endpoints, user identities and **zero initial public tables** were verified
+  before Alembic upgrade to existing `d4a7c1e9f210` (exit 0). Test fixtures and
+  fail-closed database safeguards are unchanged.
+- Commands run from `services/api` through `/tmp/discmon-task15-env.sh`, a
+  task-local wrapper using `env -i`, venv Python **3.12.3**, only PATH/HOME,
+  `APP_ENV=test`, test-only owner/session settings, and identical explicit
+  `DATABASE_URL`/`TEST_DATABASE_URL`:
+  `postgresql+psycopg://discmon_task15@127.0.0.1:55435/discmon_task15_test`.
+  No inherited `PG*` settings or provider credentials; the worktree has no `.env`.
+  Exact validation commands and results (all final commands exit 0):
+  - `python -m alembic -c alembic.ini upgrade head`: existing revision reached.
+  - `python -m pytest tests/test_discovery_scheduler.py tests/test_discovery_monthly_review.py -q -s`:
+    **39 passed in 2.67s**.
+  - `python -m pytest tests/test_discovery_webhook.py tests/test_queue.py tests/test_webhook_worker.py tests/test_github_watch_worker.py -q`:
+    **35 passed in 56.33s**.
+  - `python -m pytest tests -q`: **258 passed, 1 existing feedparser warning in 90.83s**.
+  - `python -m ruff check app tests scripts`: **All checks passed!**
+  - `python -m mypy app scripts`: **no issues in 61 source files**.
+  - `git diff --check` from repository root: clean.
+- Ownership checks matched the created container ID and task-labelled volume;
+  `docker rm -f discmon-task15-run_93c73f0b76424d7a98befff7bfb16607-pg18` and
+  `docker volume rm discmon-task15-run_93c73f0b76424d7a98befff7bfb16607-pgdata` both exited 0. Final
+  container/volume inventories are empty, matching the pre-task inventory;
+  no existing resource was removed. The downloaded PostgreSQL image remains
+  cached, without database data. Original checkout remains clean at `2c31234`.
+  Final-head backend/web/Compose CI evidence is recorded on the review-only PR,
+  not substituted with historical results. Full Hoplite session export is not
+  available through the attached tools; sanitized assertions/commands are above
+  and emitted by the reproducible focused tests. Raw/generated reports are not
+  committed. No merge, auto-merge or deployment is authorized.
+- Remaining M5: live-provider/newsletter/partner coverage and permission review,
+  opt-in external delivery acceptance, optional RSSHub/search integrations and
+  broader hardening. This implements monthly scheduling/proposal review, not
+  automatic domain admission, AI/search discovery, or complete M5 acceptance.
+
 ## 2026-11-13 — Task 14 connected GitHub-watch regression
 
 - Verified remote `handoff/stabilize-idfc-audit-20261112` at accepted `928e187`;

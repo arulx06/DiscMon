@@ -180,6 +180,53 @@ from `/health/ready` (which only runs `SELECT 1`). Never seed or ingest.
 5. On a discovery-enabled source page, use **Scan for links** to run a bounded
    extraction. A scan failure is visible and must not be treated as zero links.
 
+### Discovery scheduling (weekly default, monthly opt-in)
+
+Existing `config_json.discovery.enabled=true` sources keep the weekly Monday
+09:00 IST window when `cadence` is omitted (or explicitly `"weekly"`). Weekly
+keys remain `discover:weekly:<source-id>:<ISO-year>-W<ISO-week>`.
+
+For a deliberately approved directory or newsletter, opt in through the existing
+source configuration, for example:
+
+```json
+{
+  "discovery": {
+    "enabled": true,
+    "cadence": "monthly",
+    "allowed_domains": ["example.org"],
+    "max_candidates": 25
+  }
+}
+```
+
+Monthly eligibility begins at **09:00 Asia/Kolkata on day 1**. The first eligible
+tick enqueues the current month; a later tick catches up if the scheduler was
+down, including before 09:00 on later days. There is no historical backfill.
+The persisted key is `discover:monthly:<source-id>:<IST-year>-<two-digit-month>`;
+restarts, UTC midnight and completed jobs do not permit another scheduled job
+for that same month. Keep queue idempotency records: deleting them removes that
+protection. Active queued/running/retry-wait discovery suppresses overlapping
+work for its source; other sources remain eligible. Monthly sources do not also
+receive weekly discovery jobs.
+
+Both cadences require enabled, owner-approved, legally approved sources.
+Unsupported cadence strings, nulls and non-string values fail closed for
+scheduled discovery. `schedule_once()` returns `invalid_discovery_cadences` (a
+count only, no raw configuration); nonzero counts are also included in the
+scheduler tick log. Fix the source config rather than broadening collection.
+Ordinary approved-source monitoring, alerts and digests retain their schedules.
+A manually requested **Scan for links** remains a separate, explicit operation,
+not a second scheduled monthly job.
+
+The existing worker only proposes canonicalized, allowlisted candidates.
+Discovery does not approve linked domains or ingest opportunities. Candidates
+start unapproved/legally pending; explicit owner approval is required before
+promotion, and a newly promoted source stays disabled/legally pending until
+separately reviewed. Task 15 verifies synthetic HTTP/DNS fixtures only: no live
+newsletter, search provider, AI discovery, outbound delivery or production
+operation is validated, and **M5 remains PARTIAL**.
+
 ## Integration status
 
 `/health` shows changedetection, Telegram, Email, Sheets and optional AI as
