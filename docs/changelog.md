@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-11-13 — Task 12A Google requests transport dependency
+
+- Declare `google-auth[requests]>=2.40,<3.0`, preserving version bounds and the
+  existing Sheets authentication mechanism. Google's installed **2.62.2**
+  metadata confirms the supported extra requires `requests>=2.30.0,<3.0.0`.
+  A clean unchanged install reproduced the import failure (exit 1).
+- Add a real, unmocked `Request` import/construction regression with session
+  cleanup and no credentials or Google API calls. No backend lockfile or CI
+  changes are necessary.
+- Fresh Python **3.12.3** venv: `python -m pip install ./services/api`, real
+  transport construction and `python -m pip check` all exit 0 before dev-extra
+  installation; Google Auth **2.62.2** brings **requests 2.34.2** through the
+  declared dependency graph, never a manual install. Exact commands and resolved
+  transport package versions are recorded in `docs/PROGRESS.md`.
+- New tmpfs-only PostgreSQL **18.7** cluster `7707671447009542184`, database
+  `discmon_task12a_test`, user `discmon_task12a`, loopback **127.0.0.1:55482**;
+  verified empty before migration, isolated test environment, matching test URLs
+  and unchanged fail-closed guards. Disposable resources cleaned after tests.
+- Actual checks, all exit 0: `python -m alembic -c alembic.ini upgrade head`;
+  `python -m pytest tests/test_sheets.py -q` (**34 passed**);
+  `python -m pytest tests -q` (**168 passed, 1 existing warning**);
+  `ruff check app tests scripts` (**All checks passed!**);
+  `mypy app scripts` (**61 source files, no issues**); `git diff --check`.
+  Final-head backend/web/Compose CI evidence is recorded on the Task 12A PR.
+- No live Google, source collection, notifications or production access.
+  **M5 remains PARTIAL; original Task 12 live connected acceptance is pending.**
+  This dependency fix does not complete that acceptance. No merge or deployment.
+
 ## 2026-11-13 — Task 11 PostgreSQL 18 connected Sheets HTTP proof
 
 - Extended the existing discovery-to-Sheets regression without changing services:

@@ -19,6 +19,16 @@ from app.services import ingestion, sheets
 from tests.factories import FakeAdapter, make_candidate, make_source
 
 
+def test_google_requests_transport_constructs() -> None:
+    from google.auth.transport.requests import Request
+
+    request = Request()
+    try:
+        assert request.session is not None
+    finally:
+        request.session.close()
+
+
 class FakeSheetsGateway:
     instances: list[FakeSheetsGateway] = []
 
