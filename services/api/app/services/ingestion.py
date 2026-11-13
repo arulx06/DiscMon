@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.collectors import get_adapter
 from app.collectors.http import FetchPolicy, SafeFetcher
 from app.db.models.enums import (
+    ApprovalStatus,
     CredibilityLevel,
     HealthStatus,
+    LegalReviewStatus,
     LifeState,
     RevisionType,
 )
@@ -494,6 +496,11 @@ async def ingest_source(
         raise ValueError(f"Source {source_id} does not exist")
     if not source.enabled:
         raise ValueError(f"Source {source_id} is disabled")
+    if (
+        source.approval_status != ApprovalStatus.approved
+        or source.legal_review_status != LegalReviewStatus.approved
+    ):
+        raise ValueError("Source requires approval and legal review")
     now = now_utc()
     run = SourceRun(
         source_id=source.id,

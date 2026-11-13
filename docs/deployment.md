@@ -125,7 +125,8 @@ only `SELECT 1`, not schema compatibility; the web dashboard needs migrated
 tables, so web-root acceptance requires a separately authorized isolated
 migration. Source import and UI scan/notification actions are outside the smoke
 procedure. Runtime network isolation does not constrain build-time registry or
-package access. M0 stays **PARTIAL**.
+package access. The separate isolated M0 acceptance is recorded below; static
+configuration validation alone is not runtime acceptance.
 
 ## Local deployment (Windows/macOS/Linux)
 
@@ -145,32 +146,24 @@ curl http://localhost:8000/health/ready
 Ports: web `3000`, API `8000`, Postgres host `55432` (private by default on a
 VPS firewall). Do not publish Postgres or changedetection on an untrusted host.
 
-## Future authorized clean-volume drill
+## Isolated M0 acceptance
 
-This drill is future work, separate from the non-mutating preflight, and
-has not been performed as part of Task 2. It needs separate explicit
-authorization and a pinned commit checked out fresh in a disposable worktree,
-with no production `.env`, secrets or credentials available. Use a disposable
-Compose project, private/ingress networks and database volume, with the reviewed
-base + smoke override and validator described above (never the dev overlay). Bind
-only to confirmed nonconflicting localhost API/web ports. Do not require or add a PostgreSQL host port.
+M0 was **ACCEPTED on 2026-11-13** from Retry 5's independent engineering
+acceptance at base `2f510c1d82532e1b87acec9082f2c56e073ec07e` (PR #4 merged).
+Supplied evidence records 38 Compose tests passed; fresh isolated PostgreSQL
+18.7, API and web startup; actual database identity verified before one Alembic
+upgrade to `d4a7c1e9f210`; all 19 tables present with no seeded application
+records; API live/ready and dashboard (`Radar overview`) HTTP 200; ownership-safe
+cleanup; unchanged Git state; and final exit 0.
 
-Wait for PostgreSQL 18 readiness before any separately authorized migration.
-Check the API endpoints directly at `http://127.0.0.1:<api-port>/health/live`
-and `http://127.0.0.1:<api-port>/health/ready`; independently check that the
-web root `http://127.0.0.1:<web-port>/` is available. These are distinct API
-and web checks, not health checks proxied through the web surface. Import
-disabled source definitions only with separate authorization. Never start
-workers or the scheduler in Task 2.
-
-Capture container, network and volume inventories before the drill, verify
-pre-existing resources remain unchanged, then capture inventories again.
-Clean up only the exact container, network and volume IDs created by this
-drill; verify cleanup preserves the baseline resources. Never use `docker
-compose down -v`.
-
-M0 remains **PARTIAL**. Static preflight results are not clean-checkout runtime,
-migration, health, CI or M0 acceptance evidence.
+Evidence: [Retry 5 report](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
+and [Retry 5 original command transcript](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+This was an isolated cloud drill, not production deployment or proof of full
+outbound network isolation. The drill is documented from supplied evidence and
+was not rerun for this update. M5 remains **PARTIAL**: the fixture-backed
+connected-flow regression and full backend suite passed locally with Ruff and
+mypy clean, but this is not full M5 or live Sheets acceptance. CI is not claimed;
+commands and isolated test database details are recorded in `PROGRESS.md`.
 
 ## Always-on VPS
 

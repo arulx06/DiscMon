@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-11-13 — M5 connected discovery-to-Sheets regression
+
+The integration test exposed that `ingest_source` checked only `enabled`, so an
+enabled but unapproved or legally pending source could ingest; the initial test
+failed with `DID NOT RAISE`. A minimal guard now requires both
+`ApprovalStatus.approved` and `LegalReviewStatus.approved` before creating a run
+or fetching.
+
+From `services/api`, tests ran with `APP_ENV=test`,
+`TEST_DATABASE_URL=postgresql+psycopg://<test-user>:<test-password>@127.0.0.1:55439/discmon_task5_test`
+and matching `DATABASE_URL`, using isolated local PostgreSQL 16.15. Actual
+database identity was verified before migration; the existing fail-closed
+`*_test` connection guards remained intact. The full and focused test runs, lint
+and type checks passed:
+
+```text
+../../.venv/bin/pytest tests -q
+112 passed, 1 warning in 26.69s (existing feedparser deprecation)
+../../.venv/bin/pytest tests/test_discovery_webhook.py tests/test_sheets.py tests/test_discovery_to_sheets.py -q
+6 passed in 1.04s (final focused rerun after fake-gateway isolation cleanup; prior run 1.07s)
+../../.venv/bin/ruff check app tests scripts
+All checks passed!
+../../.venv/bin/mypy app scripts
+Success: no issues found in 61 source files
+git diff --check
+exit 0
+```
+
+The local PostgreSQL cluster was ownership-checked and stopped safely after
+verification. This PostgreSQL 16.15 test target is separate from the accepted
+M0 PostgreSQL 18.7 cloud drill. M5 remains **PARTIAL**; CI and live Sheets
+acceptance are not claimed.
+
+## 2026-11-13 — M0 ACCEPTED
+
+PR #4 was merged. Retry 5 received independent engineering acceptance at base
+`2f510c1d82532e1b87acec9082f2c56e073ec07e`. The supplied evidence records 38
+Compose tests passed; fresh isolated PostgreSQL 18.7, API and web startup; actual
+database identity verified before one Alembic upgrade to `d4a7c1e9f210`; all 19
+tables present with no seeded application records; API live/ready HTTP 200 and
+dashboard HTTP 200 (`Radar overview`); ownership-safe cleanup; unchanged Git
+state; and final exit 0.
+
+Evidence: [Retry 5 report](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
+and [Retry 5 original command transcript](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+This records acceptance from supplied evidence, not a rerun. It demonstrates an
+isolated cloud drill only, not production deployment or full outbound network
+isolation. M5 remains **PARTIAL**; the focused fixture-backed connected-flow
+result is recorded above and does not constitute full M5 or live Sheets
+acceptance.
+
+Earlier entries retain the incomplete status observed during those attempts;
+this dated acceptance supersedes those statuses without rewriting their history.
+
 ## 2026-11-13 — Task 4B smoke-network compatibility correction (STATIC ONLY)
 
 - Started from accepted handoff commit `edc2fa5b5a2e4dbe7a93611b1ade65f21b6018b6`,
