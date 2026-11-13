@@ -22,7 +22,7 @@ dependencies = [
   "python-dateutil>=2.9,<3.0",
   "apscheduler>=3.11,<4.0",
   "PyYAML>=6.0.2,<7.0",
-  "google-auth>=2.40,<3.0",
+  "google-auth[requests]>=2.40,<3.0",
 ]
 
 [project.optional-dependencies]

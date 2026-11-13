@@ -1,5 +1,78 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 12A Sheets transport dependency and fresh install
+
+- Verified the authoritative remote handoff branch at accepted checkpoint
+  `51a6c95`; created isolated branch
+  `hoplite/orchemenos-742e3381--sheets-transport` and worktree, preserving the
+  original checkout. **M5 remains PARTIAL; original Task 12 live acceptance
+  remains pending.** No live acceptance was attempted.
+- A clean Python **3.12.3** environment installed the unchanged backend
+  successfully (exit 0), but its real transport import failed (exit 1):
+  `ImportError: The requests library is not installed`. Google Auth **2.62.2**
+  official installed distribution metadata advertises `Provides-Extra: requests`
+  and `Requires-Dist: requests<3.0.0,>=2.30.0; extra == "requests"`.
+  Its transport imports `requests` and raises this error when unavailable.
+- Changed only the runtime dependency to `google-auth[requests]>=2.40,<3.0`;
+  preserved version bounds and authentication/gateway code. No backend lockfile
+  or other authoritative backend dependency manifest exists. Added an unmocked
+  import/construction regression in `tests/test_sheets.py`, closing its session
+  without credentials, token refresh or network requests. Existing CI includes it.
+- Fresh-install commands from the isolated repository root (install exit 0,
+  smoke exit 0, dependency check exit 0), **before** installing the dev extra:
+
+  ```sh
+  python -m venv /tmp/discmon-task12a-fixed
+  /tmp/discmon-task12a-fixed/bin/python -m pip install ./services/api
+  /tmp/discmon-task12a-fixed/bin/python - <<'PY'
+  from importlib.metadata import metadata, version
+  from google.auth.transport.requests import Request
+  for name in ('discmon-api', 'google-auth', 'requests', 'urllib3', 'certifi', 'charset-normalizer', 'idna'):
+      print(name, version(name))
+  print('backend dependency:', [r for r in metadata('discmon-api').get_all('Requires-Dist') if 'google-auth' in r])
+  print('extra dependency:', [r for r in metadata('google-auth').get_all('Requires-Dist') if 'extra == "requests"' in r])
+  request = Request()
+  print('constructed:', type(request).__module__ + '.' + type(request).__name__)
+  request.session.close()
+  PY
+  /tmp/discmon-task12a-fixed/bin/python -m pip check
+  ```
+
+  Resolved `discmon-api=0.1.0`, `google-auth=2.62.2`, `requests=2.34.2`,
+  `urllib3=2.8.0`, `certifi=2026.10.23`, `charset-normalizer=3.5.2`, `idna=3.20`.
+  Metadata confirms `discmon-api -> google-auth[requests] -> requests`; no manual
+  `requests` install or undeclared compensating dependency. Smoke output:
+  `constructed: google.auth.transport.requests.Request`; `pip check` reports
+  `No broken requirements found.`
+- Provisioned only new container `discmon-task12a-pg18`, `postgres:18-alpine`,
+  disposable tmpfs storage and no mounted volumes. Verified **PostgreSQL 18.7**
+  (180007), cluster system identifier `7707671447009542184`, database
+  `discmon_task12a_test`, current/session user `discmon_task12a`, client endpoint
+  **127.0.0.1:55482** (container port 5432) and **zero public tables before
+  migration**. No existing database, volume or backup was modified.
+- Installed declared test dependencies with
+  `/tmp/discmon-task12a-fixed/bin/python -m pip install -e 'services/api[dev]'`
+  (exit 0). Used an `env -i` wrapper for every migration/test/lint command,
+  retaining only test PATH/HOME/LANG and explicit test settings: `APP_ENV=test`,
+  disabled owner auth, dummy owner/session tokens, and identical `DATABASE_URL`
+  and `TEST_DATABASE_URL` set to
+  `postgresql+psycopg://discmon_task12a@127.0.0.1:55482/discmon_task12a_test`.
+  No inherited `PG*` or provider settings; unchanged fail-closed guards apply.
+  Executed from `services/api`, all exit 0:
+  - `python -m alembic -c alembic.ini upgrade head`: both migrations applied.
+  - `python -m pytest tests/test_sheets.py -q`: **34 passed in 4.05s**.
+  - `python -m pytest tests -q`: **168 passed, 1 warning in 31.27s**
+    (existing feedparser deprecation).
+  - `ruff check app tests scripts`: **All checks passed!**
+  - `mypy app scripts`: **Success: no issues found in 61 source files**.
+  - `git diff --check` from repository root: **exit 0**.
+- Final-head backend, web and Compose GitHub Actions results are recorded on the
+  Task 12A PR, not substituted with historical runs. No CI changes were needed.
+  Test container/tmpfs, temporary environments and local test artifacts were
+  removed after verification; the review worktree is retained.
+- No Google credential JSON was read, no Google/Sheets/source/notification/AI
+  API was called, and no production access, deployment or merge was performed.
+
 ## 2026-11-13 — Task 11 PostgreSQL 18 connected discovery-to-Sheets regression
 
 - Verified remote checkpoint `384a7a1` on
