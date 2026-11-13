@@ -8,23 +8,31 @@ existing postgres/api/worker/scheduler/web containers and `discmon_pgdata`.
 Moved checkouts, overlays, profiles, rootless/remote Docker or different labels
 require review; never bypass identity verification.
 
-## Task 17C shutdown correction — review only
+## Tasks 17C / 17D shutdown corrections — review only
 
-The scheduler's pre-existing SIGTERM handler assigned a local loop flag instead
-of the module flag, so it continued indefinitely even when idle. Task 17C fixes
-that scope and wakes its idle wait without cancelling the active scheduling
-transaction. Isolated process and Docker unlimited-stop evidence is recorded in
-`docs/task17c-review.md` and `docs/evidence/task17c-*.txt`; no laptop deployment or
-live Ubuntu verification was performed.
+The scheduler and worker had a pre-existing signal-handler scope defect:
+SIGTERM assigned a local flag instead of the module flag, so either service
+could continue indefinitely. Task 17C corrects the scheduler. Task 17D corrects
+the worker, wakes its idle wait and serializes stop observation on its event
+loop so it cannot race a fresh claim guard. A claim already underway is allowed
+to commit and its job finishes through the normal success/failure path before
+exit; no later claim begins. No work is arbitrarily cancelled or force-killed.
 
-**Do not activate this controller based on the scheduler correction alone.**
-The worker has the same separate nested-handler scope defect and still needs a
-reviewed fix with active-job signal tests. It can block the stop sequence before
-API/PostgreSQL shutdown. Scheduler-only owner-approved Ubuntu retesting is
-reasonable after review, but full controller activation remains blocked. Never
-work around either failure with SIGKILL, a finite forced-stop deadline, or backup
-policy changes. A genuine unresolved database wait must still be investigated;
-the correction does not impose a cancellation or database timeout.
+Evidence and remaining risks are in `docs/task17c-review.md`,
+`docs/task17d-review.md` and their `docs/evidence/` transcripts. Task 17D resolves
+the separate worker blocker described in Task 17C's historical report; the
+scheduler fix is unchanged. Isolated processes and actual Docker unlimited
+stops pass, including active success/failure and claim/commit boundaries.
+**No production Ubuntu verification, deployment or controller adoption has
+occurred.** After review and installation of the corrected images,
+owner-approved Ubuntu retesting can resume; this is not automatic approval to
+enable the controller. Preserve identity checks, the 09:00–21:00 default window,
+the 20:30 backup and all backup protections.
+
+An unresolved database/external wait can still delay graceful shutdown.
+Investigate it rather than adding forced termination or unsafe cancellation.
+Existing lease-based, at-least-once crash recovery is unchanged; the correction
+does not promise exactly-once side effects after a crash or lease expiry.
 
 ## Settings and authority
 

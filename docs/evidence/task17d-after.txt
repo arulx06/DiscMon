@@ -1,0 +1,38 @@
+$ cd services/api && ../../.venv/bin/pytest tests/test_worker_shutdown.py -v -s
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.7.0 -- /tmp/hoplite/workspace/repo-repo_1455581295/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/hoplite/workspace/repo-repo_1455581295/services/api
+configfile: pyproject.toml
+plugins: asyncio-1.5.0, anyio-4.16.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[idle-SIGTERM] mode=idle SIGTERM-to-exit=0.096s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[idle-SIGINT] mode=idle SIGINT-to-exit=0.101s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[success-SIGTERM] mode=success SIGTERM-to-exit=1.290s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[success-SIGINT] mode=success SIGINT-to-exit=1.312s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[failure-SIGTERM] mode=failure SIGTERM-to-exit=1.306s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[failure-SIGINT] mode=failure SIGINT-to-exit=1.291s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[claim-SIGTERM] mode=claim SIGTERM-to-exit=1.298s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[claim-SIGINT] mode=claim SIGINT-to-exit=1.307s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[commit-SIGTERM] mode=commit SIGTERM-to-exit=1.302s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[commit-SIGINT] mode=commit SIGINT-to-exit=1.299s exit=0
+PASSED
+tests/test_worker_shutdown.py::test_signal_during_session_entry_prevents_fresh_claim PASSED
+
+============================= 11 passed in 16.58s ==============================
+
+real	0m17.222s
+user	0m6.588s
+sys	0m0.621s
+pytest exit=0
