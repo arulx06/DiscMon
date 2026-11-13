@@ -12,6 +12,20 @@ export type RecommendationBucket =
   | "archive"
   | "excluded";
 
+export interface RuntimeSchedule {
+  revision: number;
+  start_time: string;
+  shutdown_time: string;
+  timezone: string;
+  applied_revision: number | null;
+  applied_start_time: string | null;
+  applied_shutdown_time: string | null;
+  last_sync_at: string | null;
+  sync_error: string | null;
+  status: "pending" | "applied" | "stale" | "error";
+  duration_minutes: number;
+}
+
 export interface OpportunityCard {
   id: string;
   title: string;
