@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import httpx
@@ -9,24 +11,28 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors.http import HttpResponse, SafeFetcher
+from app.db.models.alert import Alert
 from app.db.models.assessment import Assessment
 from app.db.models.discovery import DiscoveryCandidate
 from app.db.models.enums import (
     ApprovalStatus,
+    DeadlinePrecision,
     EligibilityStatus,
+    HardGateStatus,
     LegalReviewStatus,
     OpportunityType,
+    RecommendationBucket,
     SourceKind,
     SyncStatus,
 )
 from app.db.models.evidence import RawEvidence
 from app.db.models.opportunity import Opportunity, OpportunityRevision, OpportunitySource
 from app.db.models.source import Source, SourceRun
-from app.db.models.sync import SyncOutbox
+from app.db.models.sync import SyncOutbox, SyncState
 from app.services import discovery, ingestion, sheets
 from tests.factories import make_source
 from tests.test_discovery_webhook import client  # noqa: F401
-from tests.test_sheets import FakeSheetsGateway
+from tests.test_sheets import _canonical_snapshot, _mock_gateway
 
 
 @pytest.mark.integration
@@ -58,19 +64,69 @@ async def test_discovery_to_sheets_preserves_gates_and_canonical_records(
 
     monkeypatch.setattr(SafeFetcher, "get", fixture_get)
     monkeypatch.setattr("app.api.routes._validate_source_root", validate_fixture_url)
-    monkeypatch.setattr(sheets, "get_settings", lambda: SimpleNamespace(
+    settings = SimpleNamespace(
         sheets_sync_enabled=True, sheets_configured=True,
         google_sheets_spreadsheet_id="synthetic-sheet", google_sheets_tab="Opportunities",
-    ))
-    monkeypatch.setattr(FakeSheetsGateway, "instances", [])
-    gateway = FakeSheetsGateway()
+    )
+    monkeypatch.setattr(sheets, "get_settings", lambda: settings)
+    expected_header = [
+        "Opportunity ID", "Title", "Organization", "Type", "Decision", "Bucket", "Score",
+        "Professional Eligibility", "India Eligibility", "Location", "Workplace", "Deadline",
+        "Deadline Precision", "Official URL", "Next Action", "Follow-up Due", "Last Seen",
+    ]
+    remote_rows: list[list[str]] = []
+    appended_values: list[str] = []
 
-    async def create_gateway(cls, settings):
-        gateway.closed = False
-        return gateway
+    async def sheets_endpoint(request: httpx.Request) -> httpx.Response:
+        assert request.url.scheme == "https"
+        assert request.url.host == "sheets.googleapis.com"
+        assert request.headers["Authorization"] == "Bearer dummy-sheets-token"
+        base = "/v4/spreadsheets/synthetic-sheet/values/"
+        if request.method == "GET":
+            assert request.url.path == base + "'Opportunities'"
+            assert dict(request.url.params) == {"majorDimension": "ROWS"}
+            assert request.content == b""
+            return httpx.Response(200, json={
+                "range": "'Opportunities'!A1:Q2", "majorDimension": "ROWS",
+                "values": deepcopy(remote_rows),
+            })
+        payload = json.loads(request.content)
+        assert set(payload) == {"values"}
+        if request.method == "PUT":
+            assert dict(request.url.params) == {"valueInputOption": "RAW"}
+            if request.url.path == base + "Opportunities!A1:Q1":
+                assert remote_rows == []
+                assert payload == {"values": [expected_header]}
+                remote_rows.append(payload["values"][0])
+                updated_range = "Opportunities!A1:Q1"
+            else:
+                assert request.url.path == base + "Opportunities!A2:Q2"
+                assert len(remote_rows) == 2
+                assert payload == {"values": [appended_values]}
+                remote_rows[1] = payload["values"][0]
+                updated_range = "Opportunities!A2:Q2"
+            return httpx.Response(200, json={
+                "spreadsheetId": "synthetic-sheet", "updatedRange": updated_range,
+                "updatedRows": 1, "updatedColumns": 17, "updatedCells": 17,
+            })
+        assert request.method == "POST"
+        assert request.url.path == base + "Opportunities!A:Q:append"
+        assert dict(request.url.params) == {
+            "valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS",
+        }
+        assert len(remote_rows) == 1
+        values = payload["values"]
+        assert len(values) == 1 and len(values[0]) == 17
+        assert all(isinstance(cell, str) for cell in values[0])
+        appended_values.extend(values[0])
+        remote_rows.append(values[0])
+        # The write lands, but its acknowledgement fails at the HTTP boundary.
+        return httpx.Response(503, json={"error": {
+            "code": 503, "status": "UNAVAILABLE",
+            "message": "private-google-detail dummy-sheets-token",
+        }})
 
-    monkeypatch.setattr(FakeSheetsGateway, "create", classmethod(create_gateway))
-    monkeypatch.setattr(sheets, "SheetsGateway", FakeSheetsGateway)
+    gateway, requests, gateways = _mock_gateway(monkeypatch, settings, sheets_endpoint)
     source = await make_source(
         session, name="Synthetic programme directory", kind=SourceKind.static_html,
         url="https://example.com/programmes",
@@ -145,6 +201,13 @@ async def test_discovery_to_sheets_preserves_gates_and_canonical_records(
     assessment = (await session.scalars(select(Assessment))).one()
     assert assessment.professional_eligibility_state == EligibilityStatus.unknown
     assert assessment.india_eligibility_state == EligibilityStatus.unknown
+    assert assessment.opportunity_id == opportunity.id
+    assert assessment.revision_id == opportunity.current_revision_id
+    assert assessment.hard_gate_status == HardGateStatus.needs_verification
+    assert assessment.recommended_bucket == RecommendationBucket.needs_verification
+    assert opportunity.deadline_precision == DeadlinePrecision.unknown
+    assert opportunity.deadline_on is opportunity.deadline_at is None
+    assert opportunity.deadline_timezone is None
     link = (await session.scalars(select(OpportunitySource))).one()
     assert link.opportunity_id == opportunity.id
     assert link.source_id == promoted_source.id
@@ -156,6 +219,15 @@ async def test_discovery_to_sheets_preserves_gates_and_canonical_records(
     assert evidence.content_json["source_payload"]["page_hash"] == (
         hashlib.sha256(programme_html).hexdigest()
     )
+    assert evidence.content_hash == hashlib.sha256(json.dumps(
+        evidence.content_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    ).encode("utf-8")).hexdigest()
+    assert assessment.is_ai_assisted is False
+    assert assessment.evidence_refs_json == [{
+        "url": programme_url, "observed_at": evidence.fetched_at.isoformat(),
+        "excerpt": evidence.extracted_text_excerpt, "source_id": str(promoted_source.id),
+        "content_hash": evidence.content_hash,
+    }]
     assert evidence.content_json["is_remote"] is True
     assert "remote fellowship" in evidence.extracted_text_excerpt
     revision = await session.get(OpportunityRevision, opportunity.current_revision_id)
@@ -170,46 +242,76 @@ async def test_discovery_to_sheets_preserves_gates_and_canonical_records(
     assert outbox.entity_id == opportunity.id
     assert outbox.status == SyncStatus.pending
 
-    original_append = gateway.append_row
-
-    async def append_then_fail(values):
-        row_number = await original_append(values)
-        gateway.rows_data = [sheets.SHEET_HEADERS, values]
-        assert row_number == 2
-        # Model a remote write followed by a lost acknowledgement.
-        raise RuntimeError("synthetic Sheets acknowledgement failure")
-
-    monkeypatch.setattr(gateway, "append_row", append_then_fail)
+    assert await session.scalar(select(func.count()).select_from(Alert)) == 0
+    canonical_models = (
+        Opportunity, OpportunityRevision, OpportunitySource, RawEvidence, Assessment,
+    )
+    before_sync = {
+        model: await _canonical_snapshot(session, model) for model in canonical_models
+    }
+    opportunity_id = opportunity.id
     failed = await sheets.process_sheets_outbox(session)
     await session.commit()
-    assert failed["failed"] == 1
+    assert failed == {
+        "enabled": True, "configured": True, "synced": 0, "failed": 1, "skipped": 0,
+    }
     assert outbox.status == SyncStatus.failed
     assert outbox.retries == 1
-    assert outbox.last_error == "Google Sheets sync failed"
-    assert gateway.closed is True
-    # Reload committed records, not merely objects retained in the session identity map.
-    opportunity_id, revision_id, evidence_id = opportunity.id, revision.id, evidence.id
+    assert outbox.last_attempt_at is not None
+    assert outbox.last_error == "Google Sheets sync failed (HTTP 503)"
+    state = (await session.scalars(select(SyncState))).one()
+    assert state.last_error == outbox.last_error
+    assert state.last_success_at is None
+    assert state.remote_row_key is None
+    assert gateway.client.is_closed
+    assert remote_rows == [expected_header, appended_values]
+    failed_attempt_at = outbox.last_attempt_at
+    # Reload committed records rather than trusting the session identity map.
     session.expunge_all()
-    assert await session.get(Opportunity, opportunity_id) is not None
-    assert await session.get(OpportunityRevision, revision_id) is not None
-    assert await session.get(RawEvidence, evidence_id) is not None
-    monkeypatch.setattr(gateway, "append_row", original_append)
+    for model in canonical_models:
+        assert await _canonical_snapshot(session, model) == before_sync[model]
+
     retried = await sheets.process_sheets_outbox(session)
     await session.commit()
-    assert retried["synced"] == 1
+    assert retried == {
+        "enabled": True, "configured": True, "synced": 1, "failed": 0, "skipped": 0,
+    }
     synced = (await session.scalars(select(SyncOutbox))).one()
     assert synced.status == SyncStatus.synced
+    assert synced.retries == 1
     assert synced.last_error is None
-    assert len(gateway.appended) == 1
-    assert len(gateway.updated) == 1
-    row_number, values = gateway.updated[0]
-    assert row_number == 2
-    assert values[0] == str(opportunity_id)
+    assert synced.last_attempt_at >= failed_attempt_at
+    state = (await session.scalars(select(SyncState))).one()
+    assert state.sheet_id == "synthetic-sheet"
+    assert state.tab == "Opportunities"
+    assert state.remote_row_key == "2"
+    assert state.last_success_at is not None
+    assert state.last_error is None
+    assert all(item.client.is_closed for item in gateways)
+
+    # Independent read-back uses the real gateway and a fresh transport client.
+    async with httpx.AsyncClient(transport=httpx.MockTransport(sheets_endpoint)) as reader:
+        readback = await sheets.SheetsGateway(settings, "dummy-sheets-token", reader).rows()
+    assert readback == [expected_header, appended_values]
+    values = readback[1]
+    assert len(readback[0]) == len(values) == 17
+    assert [row[0] for row in readback[1:]] == [str(opportunity_id)]
     assert values[1] == "Synthetic Research Fellowship"
-    assert values[sheets.SHEET_HEADERS.index("Official URL")] == programme_url
-    assert gateway.closed is True
+    assert values[3] == "fellowship"
+    assert values[5] == "needs_verification"
+    assert values[7:9] == ["unknown", "unknown"]
+    assert values[11:14] == ["", "unknown", programme_url]
+    assert [request.method for request in requests] == ["GET", "PUT", "POST", "GET", "PUT"]
+    request_count = len(requests)
     again = await sheets.process_sheets_outbox(session)
     await session.commit()
-    assert again["synced"] == 0
-    assert len(gateway.appended) == len(gateway.updated) == 1
+    assert again["synced"] == again["failed"] == again["skipped"] == 0
+    assert len(requests) == request_count
+    assert len(gateways) == 2
+    session.expunge_all()
+    for model in canonical_models:
+        assert await _canonical_snapshot(session, model) == before_sync[model]
     assert await session.scalar(select(func.count()).select_from(Opportunity)) == 1
+    assert await session.scalar(select(func.count()).select_from(OpportunityRevision)) == 1
+    assert await session.scalar(select(func.count()).select_from(SyncOutbox)) == 1
+    assert await session.scalar(select(func.count()).select_from(Alert)) == 0
