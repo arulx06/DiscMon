@@ -1,0 +1,102 @@
+Task 13 sanitized execution evidence — 2026-11-13 UTC
+
+Base: b739b66e8f8cf9c5ca281c7626ce052147d9fe81
+Target: handoff/stabilize-idfc-audit-20261112
+Feature: hoplite/kranioi-6f74bbdd--task13
+
+Evidence is from this run, not a full Hoplite session export.
+No session-export tool is exposed in this runtime.
+
+Environment wrapper: Python 3.12.3; uv venv; uv pip install -e services/api[dev].
+Only PATH/HOME/LANG inherited; APP_ENV=test; OWNER_AUTH_MODE=disabled;
+test-only owner/session values; DATABASE_URL == TEST_DATABASE_URL;
+postgresql+psycopg://discmon:[local test password omitted]@127.0.0.1:55433/
+discmon_task13_20261113_test. No PG* variables or integration credentials.
+Wrapper runs commands from services/api with the new venv on PATH.
+HTTP is intercepted at AsyncHTTPTransport; real SSRF/redirect checks run;
+public-IP fixture URL avoids external DNS. No live source/provider contacted.
+In-app alerts only. SHEETS_SYNC_ENABLED=true exercises enqueue/coalescing
+without gateway processing or credentials. AI remains disabled.
+
+Pre-fix rerun: pytest tests/test_webhook_worker.py -q; exit 1.
+6 failed, 8 passed in 1.86s (before two active-state cases were added).
+Four paths failed because a new event returned an already-completed job.
+Independent overlapping-enqueue regression returned a second non-null job ID;
+same-second-completion regression returned the original succeeded job ID.
+Minimal queue correction: source-row NO KEY UPDATE plus UUID generation key.
+
+=== Pre-migration identity ===
+COMMAND: python /tmp/discmon-task13-identity.py
+DB_IDENTITY: ('discmon_task13_20261113_test', 'discmon', 'discmon', IPv4Address('172.17.0.2'), 5432, '18.7', 7707683539610767399, 0)
+CLIENT_ENDPOINT: 127.0.0.1 55433
+EXIT: 0
+
+=== Migrations ===
+COMMAND: alembic upgrade head
+EXIT: 0
+
+=== Focused connected regression including synthetic before/after IDs ===
+COMMAND: pytest tests/test_webhook_worker.py -q -s
+{"event": "source_ingest", "source_id": "5393537d-78db-4948-8f7a-6c1da29c5283", "run_id": "c2b81cc9-921a-416a-a28b-db9fdabb5995", "status": "success", "seen": 1, "created": 0, "updated": 1, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "5393537d-78db-4948-8f7a-6c1da29c5283", "run_id": "38088ec0-1a04-46e8-b4d5-f62d8a7f2606", "status": "success", "seen": 1, "created": 0, "updated": 0, "skipped": 1, "scan_complete": false}
+{"event": "source_ingest", "source_id": "5393537d-78db-4948-8f7a-6c1da29c5283", "run_id": "c1b99492-b84f-4160-8d1e-83123691f8d4", "status": "success", "seen": 1, "created": 0, "updated": 0, "skipped": 1, "scan_complete": false}
+{"event": "source_ingest", "source_id": "5393537d-78db-4948-8f7a-6c1da29c5283", "run_id": "4d98aadd-eeb3-4f1c-90a2-0dcfdf463146", "status": "success", "seen": 1, "created": 0, "updated": 0, "skipped": 1, "scan_complete": false}
+{"after": {"alerts": 2, "deadline_on": "2099-12-22", "evidence_ids": ["2c143b5c-545c-473e-a7ee-c5bb21b64de5"], "job_id": "e87fe32b-df7d-40e2-bd8c-96cb36adaa15", "opportunity_id": "d75ac5ea-1cd3-4635-84ed-875a889538d0", "outbox": 1, "revision_id": "bd8ebffa-7a2a-4650-b08d-c704c9d1bb72", "revision_number": 2, "source_run_id": "c2b81cc9-921a-416a-a28b-db9fdabb5995"}, "alerts": 2, "assessments": 5, "before": {"alerts": 1, "deadline_on": "2099-12-15", "opportunity_id": "d75ac5ea-1cd3-4635-84ed-875a889538d0", "outbox": 1, "revision_id": "de4b8fe7-492f-4a23-a371-30f2fe920d3a", "revision_number": 1}, "http_requests": ["https://93.184.216.34/fellowship", "https://93.184.216.34/fellowship", "https://93.184.216.34/fellowship", "https://93.184.216.34/fellowship", "https://93.184.216.34/fellowship"], "outbox": 1, "revisions": 2, "unchanged_scans": 3}
+.......{"event": "source_ingest", "source_id": "24ec48cb-f815-4197-a9b5-1087d3d368a8", "run_id": "2d4b8852-4fec-40a2-8f01-5d671b0bd25e", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "24ec48cb-f815-4197-a9b5-1087d3d368a8", "run_id": "df6a49f1-88de-49d3-91ca-569ad37e53f7", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "24ec48cb-f815-4197-a9b5-1087d3d368a8", "run_id": "0f28c23d-5735-4baa-a144-9c8a91cdccfe", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+.{"event": "source_ingest", "source_id": "f66e25ee-0b29-444f-a0b8-9fb7a2ed9d11", "run_id": "f5173b05-5828-4309-8d1e-093586ec8d52", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "f66e25ee-0b29-444f-a0b8-9fb7a2ed9d11", "run_id": "9800f0fc-c269-41ed-8ad3-23e65d5278ca", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "f66e25ee-0b29-444f-a0b8-9fb7a2ed9d11", "run_id": "6f88f31f-3ad3-4d01-a66f-50974efa0d4c", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+.{"event": "source_ingest", "source_id": "e6a9c6d9-58fe-4b63-b02e-b970bd1494e8", "run_id": "8fcc8e46-fc31-4087-ac39-ada083f19d30", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "e6a9c6d9-58fe-4b63-b02e-b970bd1494e8", "run_id": "54537ca1-8578-434e-97ba-12dbaf99a97c", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+{"event": "source_ingest", "source_id": "e6a9c6d9-58fe-4b63-b02e-b970bd1494e8", "run_id": "c95e73b4-64d2-4838-9f3d-f6bdb9259762", "status": "failed", "seen": 0, "created": 0, "updated": 0, "skipped": 0, "scan_complete": false}
+.{"event": "source_ingest", "source_id": "743cd5ca-ae8d-4dcd-8f2e-11d428603d5b", "run_id": "6a59cda2-43e0-4c47-a4da-550d8cc8c8c5", "status": "success", "seen": 1, "created": 1, "updated": 0, "skipped": 0, "scan_complete": false}
+.{"event": "source_ingest", "source_id": "809ed4f5-2fb8-4f6c-a082-a3a3195f917e", "run_id": "97071f36-57a2-4aa3-8e70-330c3091460f", "status": "success", "seen": 1, "created": 1, "updated": 0, "skipped": 0, "scan_complete": false}
+.....
+16 passed in 2.49s
+EXIT: 0
+
+=== Existing related regressions ===
+COMMAND: pytest tests/test_webhook_worker.py tests/test_discovery_webhook.py tests/test_queue.py tests/test_ingestion_pipeline.py -q
+..............................                                           [100%]
+30 passed in 3.89s
+EXIT: 0
+
+=== Full backend ===
+COMMAND: pytest tests -q
+........................................................................ [ 39%]
+........................................................................ [ 78%]
+........................................                                 [100%]
+=============================== warnings summary ===============================
+tests/test_adapters.py::test_rss_fixture_is_fetched_and_parsed_with_deadline
+  <isolated-worktree>/.venv/lib/python3.12/site-packages/feedparser/util.py:95: DeprecationWarning: To avoid breaking existing software while fixing issue 310, a temporary mapping has been created from `updated_parsed` to `published_parsed` if `updated_parsed` doesn't exist. This fallback will be removed in a future version of feedparser.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+184 passed, 1 warning in 32.96s
+EXIT: 0
+
+=== Ruff ===
+COMMAND: ruff check app tests scripts
+All checks passed!
+EXIT: 0
+
+=== mypy ===
+COMMAND: mypy app scripts
+Success: no issues found in 61 source files
+EXIT: 0
+
+=== Post-test cluster and migration identity ===
+COMMAND: python -c import os, psycopg; c=psycopg.connect(os.environ['DATABASE_URL'].replace('+psycopg','')); print('POST_TEST_IDENTITY', c.execute("SELECT current_database(), current_user, session_user, current_setting('server_version'), (SELECT system_identifier FROM pg_control_system()), (SELECT version_num FROM alembic_version)").fetchone()); c.close()
+POST_TEST_IDENTITY ('discmon_task13_20261113_test', 'discmon', 'discmon', '18.7', 7707683539610767399, 'd4a7c1e9f210')
+EXIT: 0
+
+=== Task-owned resource cleanup ===
+discmon-task13-pg18
+Remaining task-owned containers:
+Remaining task-owned volume:
+
+=== Diff whitespace verification ===
+COMMAND: git diff --cached --check
+EXIT: 0

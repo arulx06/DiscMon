@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.enums import JobKind, JobState
 from app.db.models.job import Job
+from app.db.models.source import Source
 from app.services.time import now_utc
 
 LOCK_SECONDS = 300
@@ -56,6 +57,10 @@ async def enqueue_source_job(
     *,
     available_at: datetime | None = None,
 ) -> uuid.UUID | None:
+    # Serialize enqueuers without conflicting with webhook foreign-key checks.
+    await session.execute(
+        select(Source.id).where(Source.id == source_id).with_for_update(key_share=True)
+    )
     active = await session.scalar(
         select(Job.id)
         .where(
@@ -67,11 +72,10 @@ async def enqueue_source_job(
     )
     if active is not None:
         return None
-    stamp = (available_at or now_utc()).strftime("%Y%m%d%H%M%S")
     return await enqueue_job(
         session,
         JobKind.ingest_source,
-        f"ingest:{source_id}:{stamp}",
+        f"ingest:{source_id}:{uuid.uuid4()}",
         source_id=source_id,
         available_at=available_at,
     )
