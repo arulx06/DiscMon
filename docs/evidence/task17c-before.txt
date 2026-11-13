@@ -1,0 +1,215 @@
+Working directory: services/api; test environment as documented in docs/task17c-review.md
+$ ../../.venv/bin/pytest tests/test_scheduler_shutdown.py -k sigterm -v -s
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.7.0 -- /tmp/hoplite/workspace/repo-repo_1455581295/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/hoplite/workspace/repo-repo_1455581295/services/api
+configfile: pyproject.toml
+plugins: asyncio-1.5.0, anyio-4.16.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items / 1 deselected / 3 selected
+
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[idle] mode=idle SIGTERM-to-exit=3.094s exit=0
+FAILED
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[database] mode=database SIGTERM-to-exit=3.223s exit=0
+FAILED
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[error] mode=error SIGTERM-to-exit=3.108s exit=0
+FAILED
+
+=================================== FAILURES ===================================
+______________ test_sigterm_finishes_only_current_iteration[idle] ______________
+
+session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x7f8b9676df10>
+tmp_path = PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur0')
+mode = 'idle'
+
+    @pytest.mark.parametrize("mode", ["idle", "database", "error"])
+    async def test_sigterm_finishes_only_current_iteration(session, tmp_path, mode):
+        source = await make_source(session)
+        pending = Job(kind=JobKind.deliver_alert, idempotency_key="preserved-pending-job")
+        opportunity = Opportunity(
+            title="Preserve me", official_url="https://example.com/preserved",
+            first_seen_at=now_utc(), last_seen_at=now_utc(),
+        )
+        session.add_all([pending, opportunity])
+        await session.commit()
+        before_opportunity = {
+            column.name: getattr(opportunity, column.name) for column in Opportunity.__table__.columns
+        }
+        before_pending = {
+            column.name: getattr(pending, column.name) for column in Job.__table__.columns
+        }
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "tests.scheduler_process",
+            mode,
+            str(tmp_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=dict(os.environ),
+        )
+        marker = "completed" if mode == "idle" else "waiting"
+        await wait_for_marker(process, tmp_path / marker)
+        if mode == "database":
+            async with asyncio.timeout(5):
+                while not await session.scalar(  # noqa: ASYNC110 - observe an external DB wait
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE application_name = 'discmon-task17c-scheduler' "
+                        "AND wait_event = 'PgSleep'"
+                    )
+                ):
+                    await session.commit()
+                    await asyncio.sleep(0.005)
+        calls_at_signal = int((tmp_path / "calls").read_text())
+        started = time.monotonic()
+        process.send_signal(signal.SIGTERM)
+        if mode != "idle":
+            await asyncio.sleep(0.1)
+            assert process.returncode is None, "In-flight iteration must not be cancelled"
+        (tmp_path / "release").touch()
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+        elapsed = time.monotonic() - started
+        print(f"mode={mode} SIGTERM-to-exit={elapsed:.3f}s exit={process.returncode}")
+        assert process.returncode == 0, stderr.decode()
+>       assert not (tmp_path / "watchdog").exists(), "SIGTERM did not stop scheduler"
+E       AssertionError: SIGTERM did not stop scheduler
+E       assert not True
+E        +  where True = exists()
+E        +    where exists = (PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur0') / 'watchdog').exists
+
+tests/test_scheduler_shutdown.py:81: AssertionError
+____________ test_sigterm_finishes_only_current_iteration[database] ____________
+
+session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x7f8b963a8a40>
+tmp_path = PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur1')
+mode = 'database'
+
+    @pytest.mark.parametrize("mode", ["idle", "database", "error"])
+    async def test_sigterm_finishes_only_current_iteration(session, tmp_path, mode):
+        source = await make_source(session)
+        pending = Job(kind=JobKind.deliver_alert, idempotency_key="preserved-pending-job")
+        opportunity = Opportunity(
+            title="Preserve me", official_url="https://example.com/preserved",
+            first_seen_at=now_utc(), last_seen_at=now_utc(),
+        )
+        session.add_all([pending, opportunity])
+        await session.commit()
+        before_opportunity = {
+            column.name: getattr(opportunity, column.name) for column in Opportunity.__table__.columns
+        }
+        before_pending = {
+            column.name: getattr(pending, column.name) for column in Job.__table__.columns
+        }
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "tests.scheduler_process",
+            mode,
+            str(tmp_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=dict(os.environ),
+        )
+        marker = "completed" if mode == "idle" else "waiting"
+        await wait_for_marker(process, tmp_path / marker)
+        if mode == "database":
+            async with asyncio.timeout(5):
+                while not await session.scalar(  # noqa: ASYNC110 - observe an external DB wait
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE application_name = 'discmon-task17c-scheduler' "
+                        "AND wait_event = 'PgSleep'"
+                    )
+                ):
+                    await session.commit()
+                    await asyncio.sleep(0.005)
+        calls_at_signal = int((tmp_path / "calls").read_text())
+        started = time.monotonic()
+        process.send_signal(signal.SIGTERM)
+        if mode != "idle":
+            await asyncio.sleep(0.1)
+            assert process.returncode is None, "In-flight iteration must not be cancelled"
+        (tmp_path / "release").touch()
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+        elapsed = time.monotonic() - started
+        print(f"mode={mode} SIGTERM-to-exit={elapsed:.3f}s exit={process.returncode}")
+        assert process.returncode == 0, stderr.decode()
+>       assert not (tmp_path / "watchdog").exists(), "SIGTERM did not stop scheduler"
+E       AssertionError: SIGTERM did not stop scheduler
+E       assert not True
+E        +  where True = exists()
+E        +    where exists = (PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur1') / 'watchdog').exists
+
+tests/test_scheduler_shutdown.py:81: AssertionError
+_____________ test_sigterm_finishes_only_current_iteration[error] ______________
+
+session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x7f8b963a97f0>
+tmp_path = PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur2')
+mode = 'error'
+
+    @pytest.mark.parametrize("mode", ["idle", "database", "error"])
+    async def test_sigterm_finishes_only_current_iteration(session, tmp_path, mode):
+        source = await make_source(session)
+        pending = Job(kind=JobKind.deliver_alert, idempotency_key="preserved-pending-job")
+        opportunity = Opportunity(
+            title="Preserve me", official_url="https://example.com/preserved",
+            first_seen_at=now_utc(), last_seen_at=now_utc(),
+        )
+        session.add_all([pending, opportunity])
+        await session.commit()
+        before_opportunity = {
+            column.name: getattr(opportunity, column.name) for column in Opportunity.__table__.columns
+        }
+        before_pending = {
+            column.name: getattr(pending, column.name) for column in Job.__table__.columns
+        }
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "tests.scheduler_process",
+            mode,
+            str(tmp_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=dict(os.environ),
+        )
+        marker = "completed" if mode == "idle" else "waiting"
+        await wait_for_marker(process, tmp_path / marker)
+        if mode == "database":
+            async with asyncio.timeout(5):
+                while not await session.scalar(  # noqa: ASYNC110 - observe an external DB wait
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE application_name = 'discmon-task17c-scheduler' "
+                        "AND wait_event = 'PgSleep'"
+                    )
+                ):
+                    await session.commit()
+                    await asyncio.sleep(0.005)
+        calls_at_signal = int((tmp_path / "calls").read_text())
+        started = time.monotonic()
+        process.send_signal(signal.SIGTERM)
+        if mode != "idle":
+            await asyncio.sleep(0.1)
+            assert process.returncode is None, "In-flight iteration must not be cancelled"
+        (tmp_path / "release").touch()
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+        elapsed = time.monotonic() - started
+        print(f"mode={mode} SIGTERM-to-exit={elapsed:.3f}s exit={process.returncode}")
+        assert process.returncode == 0, stderr.decode()
+>       assert not (tmp_path / "watchdog").exists(), "SIGTERM did not stop scheduler"
+E       AssertionError: SIGTERM did not stop scheduler
+E       assert not True
+E        +  where True = exists()
+E        +    where exists = (PosixPath('/tmp/pytest-of-hoplite/pytest-0/test_sigterm_finishes_only_cur2') / 'watchdog').exists
+
+tests/test_scheduler_shutdown.py:81: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[idle]
+FAILED tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[database]
+FAILED tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[error]
+======================= 3 failed, 1 deselected in 11.57s =======================
+
+pytest exit=1

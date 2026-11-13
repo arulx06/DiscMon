@@ -8,6 +8,24 @@ existing postgres/api/worker/scheduler/web containers and `discmon_pgdata`.
 Moved checkouts, overlays, profiles, rootless/remote Docker or different labels
 require review; never bypass identity verification.
 
+## Task 17C shutdown correction — review only
+
+The scheduler's pre-existing SIGTERM handler assigned a local loop flag instead
+of the module flag, so it continued indefinitely even when idle. Task 17C fixes
+that scope and wakes its idle wait without cancelling the active scheduling
+transaction. Isolated process and Docker unlimited-stop evidence is recorded in
+`docs/task17c-review.md` and `docs/evidence/task17c-*.txt`; no laptop deployment or
+live Ubuntu verification was performed.
+
+**Do not activate this controller based on the scheduler correction alone.**
+The worker has the same separate nested-handler scope defect and still needs a
+reviewed fix with active-job signal tests. It can block the stop sequence before
+API/PostgreSQL shutdown. Scheduler-only owner-approved Ubuntu retesting is
+reasonable after review, but full controller activation remains blocked. Never
+work around either failure with SIGKILL, a finite forced-stop deadline, or backup
+policy changes. A genuine unresolved database wait must still be investigated;
+the correction does not impose a cancellation or database timeout.
+
 ## Settings and authority
 
 `/settings` has an Application Runtime Schedule section, separate from alert

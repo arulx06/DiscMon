@@ -1,0 +1,24 @@
+Baseline nested stop bytecode:
+ 38           0 RESUME                   0
+
+ 39           2 LOAD_CONST               1 (False)
+              4 STORE_FAST               1 (_running)
+              6 RETURN_CONST             0 (None)
+Before SIGTERM module _running: True
+After SIGTERM module _running: True
+Fixed nested stop bytecode:
+              0 COPY_FREE_VARS           2
+
+ 38           2 RESUME                   0
+
+ 40           4 LOAD_CONST               1 (False)
+              6 STORE_GLOBAL             0 (_running)
+
+ 41           8 LOAD_DEREF               1 (loop)
+             10 LOAD_ATTR                3 (NULL|self + call_soon_threadsafe)
+             30 LOAD_DEREF               2 (wakeup)
+             32 LOAD_ATTR                4 (set)
+             52 CALL                     1
+             60 POP_TOP
+             62 RETURN_CONST             0 (None)
+After SIGTERM module _running: False wakeup: True

@@ -1,5 +1,26 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 17C scheduler graceful shutdown (review-only, not deployed)
+
+- Reproduced the pre-existing nested-scope signal-handler bug on reviewed Task
+  17B base `6d36be6`: SIGTERM assigned a local flag; the module flag stayed true.
+  Correct the actual callback scope and wake only the idle wait. Allow active
+  scheduling transactions to finish; no task cancellation, forced stop or DB
+  timeout. Queue, controller, backup policy, worker and schema remain unchanged.
+- Regression: all three real-SIGTERM cases fail before the fix and pass after;
+  plus a one-hour idle-wait wakeup test. Existing opportunity/pending-job rows
+  remain unchanged, the active iteration commits, and no subsequent tick starts.
+- Verification: **308 backend tests**, **79 host/script tests**, backend Ruff and
+  mypy (63 files) pass, exit **0**. Isolated actual Docker unlimited stops exit
+  **0**: idle **0.209s**, DB-lock case **0.499s**, including 0.3s before releasing
+  the lock. Both application exits are **0**, with no OOM kill or forced signal.
+- Commands, full outputs, timings and limits: `docs/evidence/task17c-*.txt`;
+  diagnosis and exact file inventory: `docs/task17c-review.md`.
+- No production access, migration, ingestion, deployment or laptop validation.
+  Scheduler-only Ubuntu retesting is reasonable after review; **full controller
+  activation remains blocked by the same separate worker signal-handler bug**.
+  No PR #16 merge, protected-branch update or force push.
+
 ## 2026-11-13 — Task 17B editable runtime schedule (review-only, not deployed)
 
 - Recovered exact Task 17 `bdc653f`, whose parent is accepted checkpoint `8c54d70`;
