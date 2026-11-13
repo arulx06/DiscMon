@@ -281,7 +281,41 @@ Never restore over the live database. Record the drill in the changelog.
 
 ## Notification failure
 
-- Telegram missing: alerts remain in the in-app inbox with `pending` status.
+- Telegram is **owner opt-in**: select `telegram` in the profile only after separately
+  initiating `/start` with the real bot and configuring its trusted numeric chat ID
+  server-side. Configuring credentials alone does not authorize delivery. Task 16
+  used synthetic transports only; it did not verify `/start`, Telegram acceptance
+  or actual SMTP delivery.
+- Telegram missing/invalid configuration: alerts remain `pending`; ingestion and
+  the independent in-app alert remain available. The destination is configuration,
+  never source content or alert payload data.
+- Removing Telegram before dispatch suppresses queued Telegram alerts without
+  deleting them. Re-enabling the channel does not revive suppressed rows. Dispatch
+  locks the profile while transmitting: an already-in-flight send completes before
+  a concurrent opt-out commits; opt-out cannot recall a transmitted message.
+- Delivery uses per-alert PostgreSQL row locks. Before Telegram I/O, it commits a
+  terminal `failed` claim with an unconfirmed/manual-review reason. The delivery
+  service owns this transaction boundary; use a dedicated delivery session as the
+  worker does, never a session with unrelated ingestion or owner edits.
+- Only an HTTP 200 response with `ok=true`, a positive integer message ID and the
+  configured chat acknowledgement becomes `sent`. Rejected (`ok=false`) requests
+  and failures known to occur before connection may retry, at most four attempts.
+  HTTP 401/403 and 429 stop for configuration/backoff review; automatic jobs must
+  not hammer a rate-limited bot. Repair configuration or respect provider backoff
+  before considering an explicitly authorized manual retry.
+- Timeout after connection, malformed/invalid acknowledgement, server error or
+  interruption leaves a terminal `failed` alert with **unconfirmed outcome**.
+  Never bulk-reset these to `pending` or replay them by retrying a worker job.
+  Inspect the owner-visible Telegram history through separately authorized access
+  and correlate the public opportunity/revision details. If delivery is confirmed,
+  record that evidence; if unresolved, retain `failed` for manual review. Only a
+  separately authorized, explicitly reconciled retry may risk another send. A
+  lost database commit can also leave a valid send unconfirmed; Telegram does not
+  guarantee application-level exactly-once delivery. A crash before the request
+  can conservatively require review even though nothing was sent.
+- Default quiet hours are 22:00–08:00 Asia/Kolkata and are rechecked at dispatch,
+  including overdue work. Equal start/end hours explicitly disable quiet hours.
+- Notification integration remains **M5 PARTIAL**, not production/live acceptance.
 - SMTP failure: retry with redacted errors; no duplicate dedup key.
 - Sheets failure: `sync_outbox` retries; ingestion and UI are unaffected.
 

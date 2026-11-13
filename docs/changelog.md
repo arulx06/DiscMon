@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-13 — Task 16 offline Telegram consent and delivery regression
+
+- Reuse existing alert/queue/worker path; recheck owner opt-in at dispatch and
+  retain revoked queued Telegram rows as suppressed. Preserve in-app/SMTP behavior.
+- Serialize dispatch with per-alert locks, a durable failed/manual-review claim
+  before Telegram I/O and a profile lock across the consent/send boundary. Never
+  automatically replay ambiguous outcomes; no exactly-once guarantee is claimed.
+- Require valid Telegram `ok=true`/message-ID/trusted-chat acknowledgement before
+  sent status; sanitize failures, bound definite rejection retries, stop on
+  authorization/rate limits, validate numeric chat configuration and avoid HTTPX
+  logging of credential-bearing bot URLs. Fix the fresh-profile enum constructor
+  demonstrated by the real profile API regression. No schema migration.
+- Regression-first evidence: **15 failed** at the fresh-profile API, then **14
+  failed/1 passed** after only that enum fix; deterministic concurrent baseline
+  dispatch returned processed **2**, expected **0**. Final offline focused tests:
+  **31 passed in 4.47s** (22 simulated Telegram requests, no real messages);
+  full PostgreSQL 18 suite: **297 passed, 1 warning in 96.56s**; Ruff passed;
+  mypy passed **61 files**; diff check passed. Commands/assertions/isolation and
+  cleanup recorded in `docs/evidence/task16-telegram-offline.md`.
+- Update operations for opt-in, `/start`/trusted-chat setup, revocation, quiet hours
+  and safe manual reconciliation. **M5 PARTIAL**; no real Telegram/SMTP acceptance,
+  deployment or merge. Final-head CI evidence belongs to the review PR handoff.
+
 ## 2026-11-13 — Task 15B correct newly queued discovery reporting
 
 - Correct discovery-specific enqueue reporting with atomic insert/returning:

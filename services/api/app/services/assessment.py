@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.assessment import Assessment
+from app.db.models.enums import EmploymentStage
 from app.db.models.opportunity import Opportunity, OpportunitySource
 from app.db.models.user import UserProfile
 from app.services.scoring import RULES_VERSION, AssessmentResult, assess
@@ -15,7 +16,7 @@ async def get_or_create_profile(session: AsyncSession) -> UserProfile:
     profile = await session.scalar(select(UserProfile).order_by(UserProfile.created_at).limit(1))
     if profile is None:
         profile = UserProfile(
-            employment_stage="prejoin",
+            employment_stage=EmploymentStage.prejoin,
             student_status=False,
             home_country="IN",
             preferred_countries=["IN"],

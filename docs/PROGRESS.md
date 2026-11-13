@@ -1,5 +1,40 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 16 offline Telegram opt-in and safe delivery
+
+- Verified remote handoff baseline `c297fbd`; preserved the clean original checkout
+  and created an isolated Task 16 worktree/feature branch. **M5 remains PARTIAL**.
+- Regression-first tests reproduced fresh-profile API enum serialization failure,
+  revoked-consent delivery, false Telegram acknowledgements, token-bearing HTTPX
+  logs, concurrent double dispatch and unsafe interrupted/ambiguous replay.
+- Minimal corrections reuse existing statuses and PostgreSQL transactions: current
+  consent and quiet-hour rechecks, suppressed opt-outs, per-alert locking, durable
+  terminal pre-send claims, validated acknowledgement/chat, bounded definite
+  rejection retries, manual review for ambiguous/rate-limited outcomes, numeric
+  trusted-chat validation and server-only transport construction. No migration,
+  new consent schema, broker or notification subsystem.
+- Real profile API → synthetic official HTML → ingestion/eligibility/assessment
+  (score 94) → material revision → selected-channel alerts → queue/worker →
+  intercepted Telegram transport → persisted results. Independent-session
+  concurrency/cancellation and opt-out ordering tested. Default in-app selection,
+  hard gates, date-only deadline precision and existing SMTP regressions preserved.
+- Fresh task-owned PostgreSQL **18.7**, cluster **7707706081711407144**, initially
+  empty `discmon_task16_test`; existing migrations only. Minimal sanitized test
+  environment, matching explicit database URLs, unchanged fail-closed guards.
+- Actual local commands from `services/api` through the isolated environment:
+  `python -m pytest tests/test_telegram_delivery_worker.py tests/test_alerts_smtp.py -q -s`:
+  **31 passed in 4.47s**; `python -m pytest tests -q`: **297 passed, 1 existing
+  warning in 96.56s**; Ruff **passed**; mypy **61 files passed**; `git diff --check`
+  **passed**. All exit **0**. Focused run intercepted **22** Telegram requests
+  across **29** Telegram cases; actual Telegram/SMTP sends **zero**.
+- Detailed pre-fix assertions, commands, isolation, timestamps, outcome counts,
+  changed files, limitations and cleanup: `docs/evidence/task16-telegram-offline.md`.
+  Task-owned container/volume removed after verification. Final-head GitHub CI and
+  mergeability are recorded in the PR handoff. No merge/auto-merge/deployment.
+- Live `/start`, trusted-chat owner setup and live provider acceptance remain
+  separately authorized future work. Ambiguous delivery stays unconfirmed/manual
+  review, not exactly-once or production-readiness acceptance.
+
 ## 2026-11-13 — Task 15B discovery enqueue reporting correction
 
 - Verified handoff baseline `1277036`, open/unmerged PR #14 reviewed head
