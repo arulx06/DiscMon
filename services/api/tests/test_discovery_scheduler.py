@@ -333,12 +333,15 @@ async def test_completed_discovery_does_not_emit_tick_activity(session, monkeypa
     await queue.complete_job(session, job)
     await session.commit()
     monkeypatch.setattr(scheduler, "_running", True)
-    monkeypatch.setattr(scheduler, "_install_signal_handlers", lambda: None)
+    monkeypatch.setattr(scheduler, "_install_signal_handlers", lambda _wakeup: None)
+    schedule_once = scheduler.schedule_once
 
-    async def stop_after_tick(_seconds):
+    async def stop_after_tick():
+        result = await schedule_once()
         scheduler._running = False
+        return result
 
-    monkeypatch.setattr(scheduler.asyncio, "sleep", stop_after_tick)
+    monkeypatch.setattr(scheduler, "schedule_once", stop_after_tick)
     await scheduler.run_forever()
     events = [json.loads(line)["event"] for line in capsys.readouterr().out.splitlines()]
     assert events == ["scheduler_started", "scheduler_stopped"]

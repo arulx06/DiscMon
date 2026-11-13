@@ -1,0 +1,24 @@
+Working directory: services/api; test environment as documented in docs/task17c-review.md
+$ ../../.venv/bin/pytest tests/test_scheduler_shutdown.py -v -s
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.7.0 -- /tmp/hoplite/workspace/repo-repo_1455581295/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/hoplite/workspace/repo-repo_1455581295/services/api
+configfile: pyproject.toml
+plugins: asyncio-1.5.0, anyio-4.16.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[idle] mode=idle SIGTERM-to-exit=0.114s exit=0
+PASSED
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[database] mode=database SIGTERM-to-exit=1.653s exit=0
+PASSED
+tests/test_scheduler_shutdown.py::test_sigterm_finishes_only_current_iteration[error] mode=error SIGTERM-to-exit=0.219s exit=0
+PASSED
+tests/test_scheduler_shutdown.py::test_idle_wait_is_woken_without_waiting_for_tick {"event": "scheduler_started"}
+{"event": "scheduler_stopped"}
+PASSED
+
+============================== 4 passed in 3.90s ===============================
+
+pytest exit=0
