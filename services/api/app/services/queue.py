@@ -99,13 +99,25 @@ async def enqueue_discovery_job(
     )
     if active is not None:
         return None
-    return await enqueue_job(
-        session,
-        JobKind.discover_source,
-        idempotency_key,
-        source_id=source_id,
-        available_at=available_at,
+    # Only the winning insertion represents newly queued discovery work.
+    inserted = await session.scalar(
+        insert(Job)
+        .values(
+            id=uuid.uuid4(),
+            kind=JobKind.discover_source,
+            source_id=source_id,
+            payload_json={},
+            idempotency_key=idempotency_key,
+            state=JobState.queued,
+            attempts=0,
+            max_attempts=4,
+            available_at=available_at or now_utc(),
+        )
+        .on_conflict_do_nothing(index_elements=[Job.idempotency_key])
+        .returning(Job.id)
     )
+    await session.flush()
+    return inserted
 
 
 async def claim_job(session: AsyncSession, worker_id: str) -> Job | None:
