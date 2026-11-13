@@ -47,7 +47,7 @@ class ScheduleTests(unittest.TestCase):
     def fake_run(self, command, **kwargs):
         self.calls.append((command, kwargs))
         if command[0] == "/usr/bin/systemctl":
-            output = f"LoadState=loaded\nType=oneshot\nResult=success\nActiveState={self.backup}\n"
+            output = f"LoadState=loaded\nType=oneshot\nResult=success\nMainPID=0\nSubState=dead\nActiveState={self.backup}\n"
         elif "inspect" in command:
             output = json.dumps(self.data)
         elif "ps" in command:
@@ -207,12 +207,22 @@ class ScheduleTests(unittest.TestCase):
                 [], 0, "LoadState=not-found\n", SECRET)), self.assertRaises(runtime.Unsafe):
             self.controller.backup_busy()
 
-    def test_failed_backup_blocks_shutdown_instead_of_hiding_failure(self):
+    def test_completed_failed_backup_remains_failed_but_allows_operation(self):
         self.backup = "failed"
-        with patch.object(runtime.subprocess, "run", side_effect=self.fake_run), self.assertRaisesRegex(
-                runtime.Unsafe, "backup failed"):
-            self.controller.backup_busy()
-        self.assertFalse(any("stop" in c for c, _ in self.calls))
+        with patch.object(runtime.subprocess, "run", side_effect=self.fake_run), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertFalse(self.controller.backup_busy())
+        self.assertIn("Completed backup failed", stderr.getvalue())
+        self.assertFalse(any("reset-failed" in c for c, _ in self.calls))
+        self.reconcile([True, True, True])
+        self.reconcile([False])
+
+    def test_backup_completion_requires_no_process_and_known_substate(self):
+        for status in ["MainPID=42\nSubState=failed", "MainPID=0\nSubState=unknown"]:
+            with patch.object(runtime.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    [], 0, "LoadState=loaded\nType=oneshot\nResult=exit-code\n"
+                    "ActiveState=failed\n" + status, "")), self.assertRaises(runtime.Unsafe):
+                self.controller.backup_busy()
 
     def test_late_backup_after_shutdown_fails_without_partial_artifact(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -233,11 +243,14 @@ class ScheduleTests(unittest.TestCase):
                 patch.object(runtime.sys, "argv", ["runtime_schedule.py"]), \
                 patch.object(runtime.signal, "signal"), \
                 patch.object(runtime.Controller, "backup_busy", side_effect=busy), \
-                patch.object(runtime.Controller, "reconcile", side_effect=reconcile), \
+                patch.object(runtime.Controller, "reconcile", side_effect=lambda _: reconcile()), \
+                patch.object(runtime, "ScheduleStore") as store, \
+                patch.object(runtime, "operating_hours", return_value=False), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
                 contextlib.ExitStack() as stack:
             for name, value in patches.items():
                 stack.enter_context(patch.object(runtime.time, name, side_effect=value))
+            store.return_value.current.return_value = runtime.DEFAULT_SCHEDULE
             return runtime.main()
 
     def test_backup_still_running_waits_and_rechecks_before_shutdown(self):
