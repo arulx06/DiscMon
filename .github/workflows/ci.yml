@@ -61,3 +61,17 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+
+  compose-preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: docker --version && docker compose version
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: >-
+          python3 scripts/compose_preflight.py
+          --project "discmon-preflight-${{ github.run_id }}-${{ github.run_attempt }}"
+          --check-host

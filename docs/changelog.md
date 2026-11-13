@@ -1,5 +1,125 @@
 # Changelog
 
+## 2026-11-12 — Task 2: non-destructive Compose preflight
+
+### Scope and safety
+
+Added `scripts/compose_preflight.py` and standalone unittest coverage; added one
+independent config-only CI job without changing backend/web jobs. README,
+deployment and operations docs distinguish this inspection from state-changing
+deployment and document the future separately authorized clean-volume drill.
+Production Compose, application, schema and fixture code are unchanged.
+
+The script's only Docker commands are Compose version/config and, optionally,
+info plus container/volume/network list queries. No up/down/exec/run/restart/
+pull/build, migrations, seed/collector/worker/scheduler launch, backup/restore,
+volume creation/removal or database connection is present. Compose JSON and CLI
+diagnostics are captured, never forwarded. Output contains only validated
+identities, service/profile/port metadata and fixed redacted routing. A temporary
+empty HOME/DOCKER_CONFIG, sanitized subprocess environment, explicit files,
+`--env-file /dev/null` and `--no-env-resolution` prevent implicit private inputs.
+The real-Compose test uses a deliberately invalid synthetic `.env` in a fresh
+temporary copy: successful rendering demonstrates it is ignored. No existing
+`.env`, secret file, backup or database was opened. Host inventories read only
+names/labels/published ports; they never inspect container environments or mounted contents.
+
+### Local command evidence
+
+Commands run from the separate worktree root unless stated otherwise:
+
+```text
+docker --version
+Docker version 29.1.3, build 29.1.3-0ubuntu3~24.04.2; exit 0
+docker compose version
+Docker Compose version 2.40.3+ds1-0ubuntu1~24.04.1; exit 0
+python3 --version
+Python 3.12.3; exit 0
+
+python3 -m unittest discover -s scripts/tests -v
+Ran 19 tests; OK; exit 0 (0 failed, 0 skipped)
+python3 -m py_compile scripts/compose_preflight.py scripts/tests/test_compose_preflight.py
+exit 0
+git diff --check
+exit 0, no output
+
+python3 scripts/compose_preflight.py --project discmon
+PREFLIGHT REFUSED: Require a unique non-production ... identity; exit 1
+
+# Only removes routing input for this single local static inspection command.
+env -u DOCKER_HOST -u DOCKER_CONTEXT -u COMPOSE_FILE -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES -u COMPOSE_PROFILES python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
+CONFIG PASS; exit 0; both base and base+dev rendered, no daemon queried
+# Same env prefix, adding --check-host:
+PREFLIGHT REFUSED: Local Docker daemon unavailable; host isolation NOT established.
+exit 1; no runtime changes
+```
+
+Initial unmodified invocation refused inherited Docker/Compose routing input
+(exit 1), intentionally without printing values. Clearing those variables did
+not change any saved configuration or access a remote daemon. Host checks use
+the local default socket only. Docker daemon unavailability is not static
+render failure and was not worked around by starting/replacing services.
+
+### Initial CI compatibility finding
+
+The first automatic push run `43317856314` and PR run `43317907260` rejected
+runner Compose at the version-major guard (18 tests, one error in the real
+Compose positive test). No unsafe fallback or runtime action was attempted.
+Docker's current official documentation states that Compose v2 and v5 use the
+same CLI/specification, with v5 functionally identical to v2:
+https://docs.docker.com/compose/intro/history/
+The guard now accepts these two supported majors, still probes required config
+capabilities and applies every resource/routing check. A positive mocked v5
+case was added (19 tests total); unsupported v1 remains rejected. No dependency
+was changed. CI now prints only Docker/Compose versions before the checks.
+
+### Automatic CI evidence for code commit `2dc57fa`
+
+- `gh run watch 43318019528 --repo arulx06/DiscMon --exit-status --interval 15`
+  exited 0. PR run https://github.com/arulx06/DiscMon/actions/runs/43318019528
+  concluded **success**; backend, web and compose-preflight all succeeded.
+- New non-mutating job: Docker 29.4.2 / Compose v5.1.3 / Python 3.12.16;
+  `python3 -m unittest discover -s scripts/tests -v`: 19 tests, OK, exit 0.
+  Actual `--check-host` printed `HOST CHECK PASS` and `CONFIG PASS`, exit 0.
+  Job: https://github.com/arulx06/DiscMon/actions/runs/43318019528/job/131531015060
+- Push run's preflight also succeeded:
+  https://github.com/arulx06/DiscMon/actions/runs/43318008627/job/131530975717
+  (`19 tests`, `HOST CHECK PASS`, exit 0). Its web job passed as well.
+- Unchanged backend job on ephemeral PostgreSQL 18: `111 passed, 1 warning in
+  31.51s`; Ruff `All checks passed!`, mypy `Success: no issues found in 61 source
+  files`. Web typecheck, lint and production build passed. Existing CI migration
+  occurred only inside that pre-existing job's disposable database, not locally
+  and not against production; no manual migration or workflow dispatch occurred.
+- Initial code `7c8f61c` runs `43317856314` (push) and `43317907260` (PR) failed
+  the new preflight job's version guard; fixed rather than skipped. No tests or
+  isolation checks were weakened. Runner action-deprecation/ubuntu-label notices
+  were observed; unrelated action/dependency upgrades are outside Task 2.
+- PR https://github.com/arulx06/DiscMon/pull/2 targets the required handoff branch,
+  remains unmerged, with update monitoring enabled and auto-merge disabled.
+  This evidence-only documentation commit will trigger fresh automatic checks;
+  current-head results are attached to the PR, not a claim of runtime acceptance.
+
+### Test interpretation and remaining gap
+
+Positive tests inspect real base and dev JSON and a fresh temporary Compose
+copy. Negative coverage includes protected/empty/malformed project identities,
+unknown secret-bearing arguments, inherited Compose/Docker routing, absent
+Docker/Compose, old Compose, malformed JSON and actual invalid YAML, external or
+unscoped volume/network reuse, host/private binds, published port overlap or
+wildcard bindings, profile/service changes and external/ambiguous database
+routing. Mocked host tests cover existing names and project labels for each
+resource kind, unavailable daemon and occupied fixed ports. Docker NAT port mappings/ranges are checked even without a socket listener.
+One real local
+socket test confirms occupied-port rejection. A fake subprocess allowlist
+asserts the complete command set is non-mutating and app secrets are not passed
+to Compose; sentinel credentials never appear in output or errors.
+
+Static success does not check existing resources, prove unique/disposable
+volumes or reserve ports. Host success is a point-in-time read-only prerequisite,
+not a runtime authorization. All profiles are inspected, including optional
+changedetection. Current fixed ports and secret-directory binds mean a separate
+reviewed test-only override is still required before a future authorized drill.
+**M0 remains PARTIAL**, full fresh-volume runtime acceptance not executed.
+
 ## 2026-11-12 — Task 1: fail-closed PostgreSQL test isolation
 
 ### Bounded change

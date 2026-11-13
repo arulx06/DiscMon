@@ -21,7 +21,65 @@ by real adapters and fixture-verified parsers.
 
 No Redis, Celery, Kubernetes, vector database, n8n or paid LLM is required.
 
-## Quick start (Docker Compose)
+The Compose plugin must be available without per-user Docker configuration
+(for example, a system-installed plugin). The script deliberately uses an empty
+Docker config directory; a plugin installed only under `~/.docker/cli-plugins`
+is not supported. It checks the required JSON and `--no-env-resolution`
+capabilities and suppresses CLI diagnostics that might contain secrets. Host
+checks also inspect published Docker TCP ports, including NAT-only mappings,
+not just socket listeners.
+
+## Safe Compose preflight (non-mutating)
+
+From the repository root, render the Compose configuration before any runtime
+operation. Use a unique lowercase suffix for each preflight project name:
+
+```bash
+python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
+```
+
+The script requires Python 3.12+ (standard library only) and Docker Compose v2/v5.
+It renders the base configuration and base plus the `docker-compose.dev.yml`
+overlay with `--env-file /dev/null`, `config --no-env-resolution`, and a
+sanitized environment. It does not read `.env` or secrets, start services, or
+mutate containers, networks, volumes or databases. Its redacted output
+summarizes services, named volumes, ports, profiles and routing. No arbitrary
+config, environment file or override can be supplied; production YAML is
+unchanged.
+
+The script refuses when any of `COMPOSE_FILE`, `COMPOSE_PROJECT_NAME`,
+`COMPOSE_ENV_FILES`, `COMPOSE_PROFILES`, `DOCKER_HOST` or `DOCKER_CONTEXT` is
+inherited with a non-empty value. For local static rendering only, deliberately
+unset those inputs for that invocation if they are not needed; do not use this
+wrapper with `--check-host`:
+
+```bash
+env -u COMPOSE_FILE -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES \
+  -u COMPOSE_PROFILES -u DOCKER_HOST -u DOCKER_CONTEXT \
+  python3 scripts/compose_preflight.py --project discmon-preflight-20261112-a17c
+```
+
+`--check-host` uses only the local Docker socket/default local context; it does
+not support or probe a remote daemon.
+
+Static mode does not query the Docker daemon. It can report project-scoped
+volume names, but cannot establish whether an existing resource is fresh or
+whether a host port is available. The current Compose file publishes fixed
+localhost ports `3000`, `8000`, `55432` and (with the `changedetection`
+profile) `5000`; choosing a unique project name does not isolate those ports
+from another project using them.
+
+Optional `--check-host` performs read-only Docker container, volume and network
+list queries plus local socket bind probes. It requires an available Docker
+daemon and still does not prove that resources are disposable or fresh. The
+preflight is an inspection only, not approval to start or modify anything.
+
+## Quick start (Docker Compose deployment)
+
+> **This is a state-changing deployment, not the Task 2 preflight.** Starting
+> services, migrating the database or seeding sources requires explicit
+> authorization for the target environment. A successful static preflight does
+> not provide that authorization.
 
 ```bash
 cp .env.example .env
