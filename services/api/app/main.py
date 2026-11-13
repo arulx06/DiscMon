@@ -11,6 +11,8 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.integrations import router as integration_router
+from app.api.runtime_schedule import host_router as runtime_sync_router
+from app.api.runtime_schedule import owner_router as runtime_schedule_router
 from app.api.routes import router
 from app.api.webhooks import router as webhook_router
 from app.config import get_settings
@@ -37,11 +39,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 app.include_router(webhook_router)
 app.include_router(integration_router)
+app.include_router(runtime_sync_router)
+app.include_router(runtime_schedule_router)
 app.include_router(router)
 
 
