@@ -75,3 +75,6 @@ jobs:
           python3 scripts/compose_preflight.py
           --project "discmon-preflight-${{ github.run_id }}-${{ github.run_attempt }}"
           --check-host
+      - run: >-
+          python3 scripts/compose_smoke.py
+          --project "discmon-smoke-${{ github.run_id }}-${{ github.run_attempt }}"

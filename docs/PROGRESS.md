@@ -3,6 +3,42 @@
 Dates: 2026-10-30 (historical status) and 2026-11-12 (stabilization checkpoint)
 Authority: docs/specification.md
 
+## 2026-11-13 Task 3 — isolated smoke configuration (static only)
+
+- GitHub PR #2 was verified `merged=true`; exact squash baseline is
+  `685ccd3352d7936f5c0dadd95df17e61d4bf8b74`, equal to the fetched handoff HEAD.
+  Its single parent is the accepted `739192275e7d4f239afa2430e36acfd8419feec9`.
+  Approved Task 2 preflight/test files match PR #2 head
+  `832026c26954a80bae492afdec7b23f4e4c76211` exactly (diff exit 0).
+- Fresh separate worktree `discmon-task3`, branch
+  `hoplite/m0-isolated-compose-smoke-20261113`, created at that baseline.
+  Original worktree/branch `hoplite/samos-f2115cb5` remains clean at `2c31234`;
+  no older checkout reset, switched or overwritten.
+- New base+smoke overlay removes worker/scheduler/changedetection, private binds,
+  inherited environment and production ports. Only PostgreSQL 18/API/web remain,
+  with token auth and public test-only credentials, `discmon_smoke_test`, scoped
+  pgdata/internal bridge, configurable loopback ports and restart disabled.
+- Dedicated standard-library static validator uses the unchanged preflight CLI
+  runner, sanitized environment, empty env file and isolated HOME/Docker config.
+  Fixed inputs only; validates actual all-profile model and fails closed on
+  unsafe resources/routing/ports/mounts, malformed or unsupported Compose.
+- Python 3.12.3, Docker CLI 29.1.3 and actual Compose 2.40.3 are available.
+  `python3 -m unittest discover -s scripts/tests -v`: **37 passed, 0 failed,
+  0 skipped**, exit 0 (19 unchanged preflight + 18 smoke tests; four actual
+  Compose test methods, remaining unit/mocked paths and one real socket probe).
+  Pycompile and diff checks passed, exit 0. Default/custom-port smoke rendering
+  and unchanged production preflight passed (exit 0). Initial inherited-routing refusal was expected (exit 1); routing
+  inputs were deliberately unset only for subsequent static invocations.
+- No daemon queries, container operations/builds, DB connections, migrations,
+  source seeding/ingestion, backup access or private configuration reads were
+  performed locally. Production/dev Compose and Task 2 safeguards are unchanged.
+  Existing backend/web CI behavior is retained; only a static render step added.
+- **M0 remains PARTIAL**. Static validation cannot prove resource freshness,
+  ownership, port availability, effective networking or runtime health. An
+  independently authorized runtime drill, isolated migration, direct API/web
+  checks and ID/label-verified cleanup remain required. Detailed local results
+  and delivery evidence follow in the changelog.
+
 ## 2026-11-12 Task 2 — safe Compose configuration preflight
 
 - Exact base: `739192275e7d4f239afa2430e36acfd8419feec9`, verified by fetching

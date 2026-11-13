@@ -1,0 +1,51 @@
+# Test-only public credentials. Never use this override for production.
+name: ${DISCMON_SMOKE_PROJECT:?Set a fresh discmon-smoke- identity}
+x-api-env: !reset null
+
+services:
+  postgres:
+    restart: "no"
+    environment: !override
+      POSTGRES_USER: discmon_smoke_user
+      POSTGRES_PASSWORD: smoke-only-not-a-secret
+      POSTGRES_DB: discmon_smoke_test
+    ports: !override
+      - "127.0.0.1:${DISCMON_SMOKE_DB_PORT:-56432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U discmon_smoke_user -d discmon_smoke_test"]
+
+  api:
+    restart: "no"
+    environment: !override
+      APP_ENV: test
+      APP_BASE_URL: http://127.0.0.1:${DISCMON_SMOKE_WEB_PORT:-33000}
+      DATABASE_URL: postgresql+psycopg://discmon_smoke_user:smoke-only-not-a-secret@postgres:5432/discmon_smoke_test
+      OWNER_AUTH_MODE: token
+      OWNER_API_TOKEN: smoke-only-owner-token
+      SESSION_SECRET: smoke-only-session-secret
+      ALLOWED_ORIGINS: http://127.0.0.1:${DISCMON_SMOKE_WEB_PORT:-33000}
+      SHEETS_SYNC_ENABLED: "false"
+      AI_ENABLED: "false"
+    ports: !override
+      - "127.0.0.1:${DISCMON_SMOKE_API_PORT:-38000}:8000"
+    volumes: !reset []
+
+  web:
+    restart: "no"
+    environment: !override
+      INTERNAL_API_URL: http://api:8000
+      INTERNAL_API_TOKEN: smoke-only-owner-token
+      NEXT_PUBLIC_APP_NAME: DiscMon Smoke Test
+    ports: !override
+      - "127.0.0.1:${DISCMON_SMOKE_WEB_PORT:-33000}:3000"
+
+  worker: !reset null
+  scheduler: !reset null
+  changedetection: !reset null
+
+volumes: !override
+  pgdata: {}
+
+networks:
+  default:
+    internal: true

@@ -59,6 +59,57 @@ capabilities and suppresses CLI diagnostics that might contain secrets. Host
 checks also inspect published Docker TCP ports, including NAT-only mappings,
 not just socket listeners.
 
+## Task 3 smoke boundary and future ownership-safe procedure
+
+For the new static model, use a fresh project identity:
+
+```bash
+python3 scripts/compose_smoke.py --project discmon-smoke-20261113-a17c
+```
+
+See
+[deployment](deployment.md#isolated-smoke-configuration-task-3) for ports and
+options. This fixed base+smoke render does not query the daemon, read private
+config, start containers, build, migrate, seed, scan or send notifications.
+Default/all-profile model contains only postgres/API/web on an internal bridge,
+with no secret binds and no production port mappings. Credentials are public
+test-only values. Do not use the production preflight's `--check-host` as proof
+of smoke-port availability; it checks the production configuration's ports.
+
+**Separate explicit owner authorization is required before every runtime drill.**
+The proposed procedure, not executed in Task 3, is:
+
+1. Pin the reviewed commit in a new clean worktree without private files. Choose
+   a never-used project suffix, run the static validator, and retain its redacted
+   report plus exact sanitized invocation. Do not reuse this document's examples.
+2. Before creating anything, inventory existing container/network/volume IDs,
+   names, Compose project/service labels and published ports read-only. Refuse
+   if any resource has the proposed project label or expected name/prefix. Check
+   chosen loopback ports with both socket probes and Docker published-port
+   metadata. No inventory or host check is performed by Task 3's validator.
+3. With authorization, create/build/start **only** the validated postgres, api
+   and web model using the same project/files/empty-env/sanitized environment.
+   Record created IDs immediately; verify names and Compose project/service
+   labels against the inventory. A matching name alone never proves ownership.
+4. Wait for isolated PostgreSQL readiness. Migrate only this independently
+   verified isolated target if explicitly authorized; source import/seed,
+   ingestion, worker/scheduler startup, scans and notifications remain forbidden
+   unless separately authorized. Check API live/ready directly and web root
+   independently. Verify effective localhost exposure and internal-bridge
+   routing; static config does not establish this runtime behavior.
+5. Record a post-drill inventory and compare it to the baseline. Before cleanup,
+   positively match each created ID to the run's creation record, project labels
+   and expected service/resource name. Refuse ambiguous ownership. Remove only
+   those specific IDs; never blanket-prune, remove by prefix alone, or use
+   `docker compose down -v`. Verify baseline resources are unchanged and all
+   owned runtime resources are gone; record any leftover images explicitly.
+
+No services, databases or volumes were accessed or changed in Task 3. A future
+race between inventory and resource creation remains possible: refuse conflicts
+rather than adopting resources. Static validation cannot prove freshness,
+resource ownership, port availability or runtime health. **M0 remains PARTIAL**
+until the separately authorized drill provides that evidence.
+
 ## Daily
 
 - Open Overview: check pipeline health, source failures and attention list.
