@@ -1,0 +1,7 @@
+Initial isolated Docker attempt failed: bind markers outside the checkout
+$ docker run --rm -v /tmp/discmon-task17d-mountprobe:/markers discmon-task17d-api python -c ...
+docker: Error response from daemon: Hoplite Docker policy rejected this request: host bind mounts are limited to the workspace checkout (/tmp/hoplite/workspace, /tmp/hoplite/workspaces); use a path inside the repository or a named volume
+
+Run 'docker run --help' for more information
+probe exit=125
+Corrected driver uses a temporary marker directory inside .hoplite/; no policy changes.

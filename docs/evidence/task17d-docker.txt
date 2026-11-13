@@ -1,0 +1,435 @@
+Isolated driver (public disposable credentials only):
+import json
+import os
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from uuid import uuid4
+
+import psycopg
+from psycopg.rows import dict_row
+
+
+def command(*args):
+    print('$ ' + ' '.join(args), flush=True)
+    result = subprocess.run(args, capture_output=True, text=True)
+    print(result.stdout.strip(), flush=True)
+    if result.stderr:
+        print(result.stderr.strip(), flush=True)
+    result.check_returncode()
+    return result.stdout.strip()
+
+
+def wait_until(predicate):
+    deadline = time.monotonic() + 15
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise TimeoutError('isolated container readiness')
+        time.sleep(0.01)
+
+
+dsn = 'postgresql://discmon:discmon@127.0.0.1:55439/discmon_task17d_container_test'
+tests = Path('services/api/tests').resolve()
+with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as db:
+    for mode in ('idle', 'success', 'failure', 'claim', 'commit'):
+        db.execute('TRUNCATE jobs CASCADE')
+        pending = uuid4()
+        db.execute("INSERT INTO jobs (id, kind, idempotency_key, state, attempts, max_attempts, payload_json, available_at) VALUES (%s, 'deliver_alert', 'pending', 'queued', 0, 4, '{}', now() + interval '1 day')", (pending,))
+        before = db.execute('SELECT * FROM jobs WHERE id = %s', (pending,)).fetchone()
+        if mode != 'idle':
+            active, following = uuid4(), uuid4()
+            for job_id, key, offset in [(active, 'active-fixture', 2), (following, 'following', 1)]:
+                db.execute("INSERT INTO jobs (id, kind, idempotency_key, state, attempts, max_attempts, payload_json, available_at) VALUES (%s, 'deliver_alert', %s, 'queued', 0, 4, '{}', now() - %s * interval '1 second')", (job_id, key, offset))
+            next_before = db.execute('SELECT * FROM jobs WHERE id = %s', (following,)).fetchone()
+        with tempfile.TemporaryDirectory(prefix='discmon-task17d-', dir=Path('.hoplite').resolve()) as directory:
+            os.chmod(directory, 0o777)
+            markers = Path(directory)
+            name = 'discmon-task17d-worker-' + mode
+            command('docker', 'run', '-d', '--name', name,
+                    '--network', 'discmon-task17c-isolated', '-e', 'APP_ENV=test',
+                    '-e', 'DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test',
+                    '-v', f'{tests}:/app/tests:ro', '-v', f'{directory}:/markers',
+                    'discmon-task17d-api', 'python', '-m', 'tests.worker_process', mode, '/markers')
+            wait_until(lambda: (markers / ('idle' if mode == 'idle' else 'waiting')).exists())
+            if mode != 'idle':
+                wait_until(lambda: db.execute("SELECT count(*) AS n FROM pg_stat_activity WHERE application_name = 'discmon-task17d-worker' AND wait_event = 'PgSleep'").fetchone()['n'] == 1)
+            started = time.monotonic()
+            print('$ docker stop --timeout=-1 ' + name, flush=True)
+            stop = subprocess.Popen(['docker', 'stop', '--timeout=-1', name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if mode != 'idle':
+                time.sleep(0.1)
+                assert stop.poll() is None, 'Active work must not be interrupted'
+                print('Stop still waiting for in-flight DB work after 0.1s', flush=True)
+            stdout, stderr = stop.communicate(timeout=15)
+            print(stdout.strip(), stderr.strip(), flush=True)
+            print(f'mode={mode} unlimited-stop={time.monotonic()-started:.3f}s CLI-exit={stop.returncode}', flush=True)
+            assert stop.returncode == 0
+            state = json.loads(command('docker', 'inspect', '--format', '{{json .State}}', name))
+            assert state['ExitCode'] == 0 and not state['Running'] and not state['OOMKilled']
+            logs = command('docker', 'logs', name)
+            assert 'worker_stopped' in logs
+            assert not (markers / 'watchdog').exists()
+            assert (markers / 'claims').read_text() == '1'
+            assert db.execute('SELECT * FROM jobs WHERE id = %s', (pending,)).fetchone() == before
+            if mode != 'idle':
+                assert db.execute('SELECT * FROM jobs WHERE id = %s', (following,)).fetchone() == next_before
+                outcome = db.execute('SELECT state, attempts, locked_by, lock_expires_at, last_error_redacted, payload_json, available_at > now() AS retry_in_future FROM jobs WHERE id = %s', (active,)).fetchone()
+                print('Final database outcome:', outcome, flush=True)
+                assert outcome['attempts'] == 1
+                assert outcome['locked_by'] is None and outcome['lock_expires_at'] is None
+                if mode == 'failure':
+                    assert outcome['state'] == 'retry_wait' and outcome['retry_in_future']
+                    assert outcome['payload_json'] == {}
+                    assert outcome['last_error_redacted'] == 'RuntimeError: fixture-backed worker failure'
+                    assert 'job_failed' in logs
+                else:
+                    assert outcome['state'] == 'succeeded'
+                    assert outcome['payload_json'] == {'fixture_effect': 'committed'}
+            print('Pending work unchanged; one claim; no watchdog; no forced signal', flush=True)
+            command('docker', 'rm', name)
+--- output: .venv/bin/python /tmp/task17d_docker.py ---
+$ docker run -d --name discmon-task17d-worker-idle --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-2i49zscm:/markers discmon-task17d-api python -m tests.worker_process idle /markers
+954a5380a492ec7383c9a57dc5e44077be0ad46568e7ba59fe3e1f298726dacc
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-idle
+discmon-task17d-worker-idle
+mode=idle unlimited-stop=0.200s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-idle
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:08:05.516055102Z","FinishedAt":"2026-11-13T21:08:06.678815168Z"}
+$ docker logs discmon-task17d-worker-idle
+{"event": "worker_started", "worker_id": "954a5380a492-1-393038"}
+{"event": "worker_stopped", "worker_id": "954a5380a492-1-393038"}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-idle
+discmon-task17d-worker-idle
+$ docker run -d --name discmon-task17d-worker-success --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-nv1ufqz5:/markers discmon-task17d-api python -m tests.worker_process success /markers
+e4de63e87415404e0eecd255aa0bed29fbc3f2f90ce35032d6bbdf480f2b69b1
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-success
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-success
+mode=success unlimited-stop=1.438s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-success
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:08:06.876943508Z","FinishedAt":"2026-11-13T21:08:09.278882734Z"}
+$ docker logs discmon-task17d-worker-success
+{"event": "worker_started", "worker_id": "e4de63e87415-1-6162ea"}
+{"event": "worker_stopped", "worker_id": "e4de63e87415-1-6162ea"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-success
+discmon-task17d-worker-success
+$ docker run -d --name discmon-task17d-worker-failure --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-0bwwlsox:/markers discmon-task17d-api python -m tests.worker_process failure /markers
+08f56052fa2adb95627da09492192284f6dd5e5793a9e125bf3f9030ea4288f2
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-failure
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-failure
+mode=failure unlimited-stop=1.369s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-failure
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:08:09.502310419Z","FinishedAt":"2026-11-13T21:08:11.810764663Z"}
+$ docker logs discmon-task17d-worker-failure
+{"event": "worker_started", "worker_id": "08f56052fa2a-1-52013f"}
+{"event": "job_failed", "job_id": "a5b2aae8-289f-4739-8715-e0b98904c752", "kind": "deliver_alert", "error": "RuntimeError"}
+{"event": "worker_stopped", "worker_id": "08f56052fa2a-1-52013f"}
+Final database outcome: {'state': 'retry_wait', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': 'RuntimeError: fixture-backed worker failure', 'payload_json': {}, 'retry_in_future': True}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-failure
+discmon-task17d-worker-failure
+$ docker run -d --name discmon-task17d-worker-claim --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-t83rcyjs:/markers discmon-task17d-api python -m tests.worker_process claim /markers
+be74db1771e79b674cf1a792cdf6226ee6844bb08447a15a268b2c5c0b192ad4
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-claim
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-claim
+mode=claim unlimited-stop=1.393s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-claim
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:08:12.002859204Z","FinishedAt":"2026-11-13T21:08:14.330544772Z"}
+$ docker logs discmon-task17d-worker-claim
+{"event": "worker_started", "worker_id": "be74db1771e7-1-4978a7"}
+{"event": "worker_stopped", "worker_id": "be74db1771e7-1-4978a7"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-claim
+discmon-task17d-worker-claim
+$ docker run -d --name discmon-task17d-worker-commit --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-6vq7yp36:/markers discmon-task17d-api python -m tests.worker_process commit /markers
+fdf162258fcd7cad1355647ab09ecaf8a2a80cf83ac6e03f0e006da490bad74b
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-commit
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-commit
+mode=commit unlimited-stop=1.421s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-commit
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:08:14.530670749Z","FinishedAt":"2026-11-13T21:08:16.899976736Z"}
+$ docker logs discmon-task17d-worker-commit
+{"event": "worker_started", "worker_id": "fdf162258fcd-1-b715d0"}
+{"event": "worker_stopped", "worker_id": "fdf162258fcd-1-b715d0"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-commit
+discmon-task17d-worker-commit
+driver exit=0
+--- unpatched production entrypoint idle driver ---
+import json
+import subprocess
+import time
+
+import psycopg
+
+name = 'discmon-task17d-actual-worker-idle'
+args = ['docker', 'run', '-d', '--name', name, '--network', 'discmon-task17c-isolated', '-e', 'APP_ENV=test', '-e', 'DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test?application_name=task17d-actual-idle', 'discmon-task17d-api', 'python', '-m', 'app.worker']
+print('$', ' '.join(args), flush=True)
+subprocess.run(args, check=True)
+with psycopg.connect('postgresql://discmon:discmon@127.0.0.1:55439/discmon_task17d_container_test', autocommit=True) as db:
+    # Earlier fixture runs left a fresh queued job; postpone it before this empty-poll check.
+    # This is a disposable test database, never the application's production database.
+    db.execute("UPDATE jobs SET available_at = now() + interval '1 day' WHERE state IN ('queued', 'retry_wait')")
+    deadline = time.monotonic() + 15
+    while not db.execute("SELECT count(*) FROM pg_stat_activity WHERE application_name = 'task17d-actual-idle' AND state = 'idle'").fetchone()[0]:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    before = db.execute('SELECT * FROM jobs ORDER BY id').fetchall()
+    start = time.monotonic()
+    print('$ docker stop --timeout=-1 ' + name, flush=True)
+    stop = subprocess.run(['docker', 'stop', '--timeout=-1', name], timeout=15)
+    print(f'actual-entrypoint idle unlimited-stop={time.monotonic()-start:.3f}s CLI-exit={stop.returncode}', flush=True)
+    assert stop.returncode == 0
+    state = json.loads(subprocess.check_output(['docker', 'inspect', '--format', '{{json .State}}', name], text=True))
+    print(state, flush=True)
+    assert state['ExitCode'] == 0 and not state['Running'] and not state['OOMKilled']
+    logs = subprocess.check_output(['docker', 'logs', name], text=True)
+    print(logs, flush=True)
+    assert 'worker_stopped' in logs
+    assert db.execute('SELECT * FROM jobs ORDER BY id').fetchall() == before
+subprocess.run(['docker', 'rm', name], check=True)
+--- output ---
+$ docker run -d --name discmon-task17d-actual-worker-idle --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test?application_name=task17d-actual-idle discmon-task17d-api python -m app.worker
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+f126908428829ed801fa01d0cf7728e97cbddabeb4f1c21a3f953771fa418083
+$ docker stop --timeout=-1 discmon-task17d-actual-worker-idle
+discmon-task17d-actual-worker-idle
+actual-entrypoint idle unlimited-stop=0.264s CLI-exit=0
+{'Status': 'exited', 'Running': False, 'Paused': False, 'Restarting': False, 'OOMKilled': False, 'Dead': False, 'Pid': 0, 'ExitCode': 0, 'Error': '', 'StartedAt': '2026-11-13T21:08:33.431589128Z', 'FinishedAt': '2026-11-13T21:08:34.604434587Z'}
+{"event": "worker_started", "worker_id": "f12690842882-1-f0c515"}
+{"event": "worker_stopped", "worker_id": "f12690842882-1-f0c515"}
+
+discmon-task17d-actual-worker-idle
+actual-idle exit=0
+Final Docker driver after event-loop serialization refinement:
+import json
+import os
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from uuid import uuid4
+
+import psycopg
+from psycopg.rows import dict_row
+
+
+def command(*args):
+    print('$ ' + ' '.join(args), flush=True)
+    result = subprocess.run(args, capture_output=True, text=True)
+    print(result.stdout.strip(), flush=True)
+    if result.stderr:
+        print(result.stderr.strip(), flush=True)
+    result.check_returncode()
+    return result.stdout.strip()
+
+
+def wait_until(predicate):
+    deadline = time.monotonic() + 15
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise TimeoutError('isolated container readiness')
+        time.sleep(0.01)
+
+
+dsn = 'postgresql://discmon:discmon@127.0.0.1:55439/discmon_task17d_container_test'
+tests = Path('services/api/tests').resolve()
+with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as db:
+    for mode in ('idle', 'success', 'failure', 'claim', 'commit'):
+        db.execute('TRUNCATE jobs CASCADE')
+        pending = uuid4()
+        db.execute("INSERT INTO jobs (id, kind, idempotency_key, state, attempts, max_attempts, payload_json, available_at) VALUES (%s, 'deliver_alert', 'pending', 'queued', 0, 4, '{}', now() + interval '1 day')", (pending,))
+        before = db.execute('SELECT * FROM jobs WHERE id = %s', (pending,)).fetchone()
+        if mode != 'idle':
+            active, following = uuid4(), uuid4()
+            for job_id, key, offset in [(active, 'active-fixture', 2), (following, 'following', 1)]:
+                db.execute("INSERT INTO jobs (id, kind, idempotency_key, state, attempts, max_attempts, payload_json, available_at) VALUES (%s, 'deliver_alert', %s, 'queued', 0, 4, '{}', now() - %s * interval '1 second')", (job_id, key, offset))
+            next_before = db.execute('SELECT * FROM jobs WHERE id = %s', (following,)).fetchone()
+        with tempfile.TemporaryDirectory(prefix='discmon-task17d-', dir=Path('.hoplite').resolve()) as directory:
+            os.chmod(directory, 0o777)
+            markers = Path(directory)
+            name = 'discmon-task17d-worker-' + mode
+            command('docker', 'run', '-d', '--name', name,
+                    '--network', 'discmon-task17c-isolated', '-e', 'APP_ENV=test',
+                    '-e', 'DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test',
+                    '-v', f'{tests}:/app/tests:ro', '-v', f'{directory}:/markers',
+                    'discmon-task17d-api', 'python', '-m', 'tests.worker_process', mode, '/markers')
+            wait_until(lambda: (markers / ('idle' if mode == 'idle' else 'waiting')).exists())
+            if mode != 'idle':
+                wait_until(lambda: db.execute("SELECT count(*) AS n FROM pg_stat_activity WHERE application_name = 'discmon-task17d-worker' AND wait_event = 'PgSleep'").fetchone()['n'] == 1)
+            started = time.monotonic()
+            print('$ docker stop --timeout=-1 ' + name, flush=True)
+            stop = subprocess.Popen(['docker', 'stop', '--timeout=-1', name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if mode != 'idle':
+                time.sleep(0.1)
+                assert stop.poll() is None, 'Active work must not be interrupted'
+                print('Stop still waiting for in-flight DB work after 0.1s', flush=True)
+            stdout, stderr = stop.communicate(timeout=15)
+            print(stdout.strip(), stderr.strip(), flush=True)
+            print(f'mode={mode} unlimited-stop={time.monotonic()-started:.3f}s CLI-exit={stop.returncode}', flush=True)
+            assert stop.returncode == 0
+            state = json.loads(command('docker', 'inspect', '--format', '{{json .State}}', name))
+            assert state['ExitCode'] == 0 and not state['Running'] and not state['OOMKilled']
+            logs = command('docker', 'logs', name)
+            assert 'worker_stopped' in logs
+            assert not (markers / 'watchdog').exists()
+            assert (markers / 'claims').read_text() == '1'
+            assert db.execute('SELECT * FROM jobs WHERE id = %s', (pending,)).fetchone() == before
+            if mode != 'idle':
+                assert db.execute('SELECT * FROM jobs WHERE id = %s', (following,)).fetchone() == next_before
+                outcome = db.execute('SELECT state, attempts, locked_by, lock_expires_at, last_error_redacted, payload_json, available_at > now() AS retry_in_future FROM jobs WHERE id = %s', (active,)).fetchone()
+                print('Final database outcome:', outcome, flush=True)
+                assert outcome['attempts'] == 1
+                assert outcome['locked_by'] is None and outcome['lock_expires_at'] is None
+                if mode == 'failure':
+                    assert outcome['state'] == 'retry_wait' and outcome['retry_in_future']
+                    assert outcome['payload_json'] == {}
+                    assert outcome['last_error_redacted'] == 'RuntimeError: fixture-backed worker failure'
+                    assert 'job_failed' in logs
+                else:
+                    assert outcome['state'] == 'succeeded'
+                    assert outcome['payload_json'] == {'fixture_effect': 'committed'}
+            print('Pending work unchanged; one claim; no watchdog; no forced signal', flush=True)
+            command('docker', 'rm', name)
+--- output ---
+$ docker run -d --name discmon-task17d-worker-idle --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-lsugepjp:/markers discmon-task17d-api python -m tests.worker_process idle /markers
+569bd62903ac5565805affab4b099c70f52e1cab551095cf55d7f77b739541ca
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-idle
+discmon-task17d-worker-idle
+mode=idle unlimited-stop=0.212s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-idle
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:10:02.435964978Z","FinishedAt":"2026-11-13T21:10:03.568123262Z"}
+$ docker logs discmon-task17d-worker-idle
+{"event": "worker_started", "worker_id": "569bd62903ac-1-9cd0d6"}
+{"event": "worker_stopped", "worker_id": "569bd62903ac-1-9cd0d6"}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-idle
+discmon-task17d-worker-idle
+$ docker run -d --name discmon-task17d-worker-success --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-nks2wd8j:/markers discmon-task17d-api python -m tests.worker_process success /markers
+24c86b15fe5efaf5d9310566130bb36b95aceb9787c20ab79b5e127201ea77cb
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-success
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-success
+mode=success unlimited-stop=1.407s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-success
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:10:03.781954804Z","FinishedAt":"2026-11-13T21:10:06.105989701Z"}
+$ docker logs discmon-task17d-worker-success
+{"event": "worker_started", "worker_id": "24c86b15fe5e-1-9362d9"}
+{"event": "worker_stopped", "worker_id": "24c86b15fe5e-1-9362d9"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-success
+discmon-task17d-worker-success
+$ docker run -d --name discmon-task17d-worker-failure --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-nqpdsfwd:/markers discmon-task17d-api python -m tests.worker_process failure /markers
+29bd82538eafca6dc6d3db94fa1546689bb97786a91ab95609410500806dbdc6
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-failure
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-failure
+mode=failure unlimited-stop=1.387s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-failure
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:10:06.331405472Z","FinishedAt":"2026-11-13T21:10:08.670245468Z"}
+$ docker logs discmon-task17d-worker-failure
+{"event": "worker_started", "worker_id": "29bd82538eaf-1-cd07cf"}
+{"event": "job_failed", "job_id": "4c41029c-08fc-4723-9fa9-907c7f4d53fa", "kind": "deliver_alert", "error": "RuntimeError"}
+{"event": "worker_stopped", "worker_id": "29bd82538eaf-1-cd07cf"}
+Final database outcome: {'state': 'retry_wait', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': 'RuntimeError: fixture-backed worker failure', 'payload_json': {}, 'retry_in_future': True}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-failure
+discmon-task17d-worker-failure
+$ docker run -d --name discmon-task17d-worker-claim --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-dp8u2iey:/markers discmon-task17d-api python -m tests.worker_process claim /markers
+6639bc2151ca9ee6a7e5cd29b4fd94b8da4e7b79b71467faddd01d6011bbcbe0
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-claim
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-claim
+mode=claim unlimited-stop=1.399s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-claim
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:10:08.876004073Z","FinishedAt":"2026-11-13T21:10:11.254532511Z"}
+$ docker logs discmon-task17d-worker-claim
+{"event": "worker_started", "worker_id": "6639bc2151ca-1-18371b"}
+{"event": "worker_stopped", "worker_id": "6639bc2151ca-1-18371b"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-claim
+discmon-task17d-worker-claim
+$ docker run -d --name discmon-task17d-worker-commit --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test -v /tmp/hoplite/workspace/repo-repo_1455581295/services/api/tests:/app/tests:ro -v /tmp/hoplite/workspace/repo-repo_1455581295/.hoplite/discmon-task17d-_1ls9fub:/markers discmon-task17d-api python -m tests.worker_process commit /markers
+c8714fdd69958e43607ed3041ada2dc45f15b9828d24d882aed4544ce686d4bb
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+$ docker stop --timeout=-1 discmon-task17d-worker-commit
+Stop still waiting for in-flight DB work after 0.1s
+discmon-task17d-worker-commit
+mode=commit unlimited-stop=1.403s CLI-exit=0
+$ docker inspect --format {{json .State}} discmon-task17d-worker-commit
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-11-13T21:10:11.45831578Z","FinishedAt":"2026-11-13T21:10:13.804155319Z"}
+$ docker logs discmon-task17d-worker-commit
+{"event": "worker_started", "worker_id": "c8714fdd6995-1-54c9d2"}
+{"event": "worker_stopped", "worker_id": "c8714fdd6995-1-54c9d2"}
+Final database outcome: {'state': 'succeeded', 'attempts': 1, 'locked_by': None, 'lock_expires_at': None, 'last_error_redacted': None, 'payload_json': {'fixture_effect': 'committed'}, 'retry_in_future': False}
+Pending work unchanged; one claim; no watchdog; no forced signal
+$ docker rm discmon-task17d-worker-commit
+discmon-task17d-worker-commit
+driver exit=0
+UPDATE 2
+Actual production-entrypoint idle driver:
+import json
+import subprocess
+import time
+
+import psycopg
+
+name = 'discmon-task17d-actual-worker-idle'
+args = ['docker', 'run', '-d', '--name', name, '--network', 'discmon-task17c-isolated', '-e', 'APP_ENV=test', '-e', 'DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test?application_name=task17d-actual-idle', 'discmon-task17d-api', 'python', '-m', 'app.worker']
+print('$', ' '.join(args), flush=True)
+subprocess.run(args, check=True)
+with psycopg.connect('postgresql://discmon:discmon@127.0.0.1:55439/discmon_task17d_container_test', autocommit=True) as db:
+    # Earlier fixture runs left a fresh queued job; postpone it before this empty-poll check.
+    # This is a disposable test database, never the application's production database.
+    db.execute("UPDATE jobs SET available_at = now() + interval '1 day' WHERE state IN ('queued', 'retry_wait')")
+    deadline = time.monotonic() + 15
+    while not db.execute("SELECT count(*) FROM pg_stat_activity WHERE application_name = 'task17d-actual-idle' AND state = 'idle'").fetchone()[0]:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    before = db.execute('SELECT * FROM jobs ORDER BY id').fetchall()
+    start = time.monotonic()
+    print('$ docker stop --timeout=-1 ' + name, flush=True)
+    stop = subprocess.run(['docker', 'stop', '--timeout=-1', name], timeout=15)
+    print(f'actual-entrypoint idle unlimited-stop={time.monotonic()-start:.3f}s CLI-exit={stop.returncode}', flush=True)
+    assert stop.returncode == 0
+    state = json.loads(subprocess.check_output(['docker', 'inspect', '--format', '{{json .State}}', name], text=True))
+    print(state, flush=True)
+    assert state['ExitCode'] == 0 and not state['Running'] and not state['OOMKilled']
+    logs = subprocess.check_output(['docker', 'logs', name], text=True)
+    print(logs, flush=True)
+    assert 'worker_stopped' in logs
+    assert db.execute('SELECT * FROM jobs ORDER BY id').fetchall() == before
+subprocess.run(['docker', 'rm', name], check=True)
+--- output ---
+$ docker run -d --name discmon-task17d-actual-worker-idle --network discmon-task17c-isolated -e APP_ENV=test -e DATABASE_URL=postgresql+psycopg://discmon:discmon@discmon-task17c-postgres:5432/discmon_task17d_container_test?application_name=task17d-actual-idle discmon-task17d-api python -m app.worker
+WARNING: Your kernel does not support swap limit capabilities or the cgroup is not mounted. Memory limited without swap.
+ba8c6d189062147323bd84d43fef7cd2a7faaff51fbdba9056ad3996bfa6a472
+$ docker stop --timeout=-1 discmon-task17d-actual-worker-idle
+discmon-task17d-actual-worker-idle
+actual-entrypoint idle unlimited-stop=0.214s CLI-exit=0
+{'Status': 'exited', 'Running': False, 'Paused': False, 'Restarting': False, 'OOMKilled': False, 'Dead': False, 'Pid': 0, 'ExitCode': 0, 'Error': '', 'StartedAt': '2026-11-13T21:10:14.168097122Z', 'FinishedAt': '2026-11-13T21:10:15.328680331Z'}
+{"event": "worker_started", "worker_id": "ba8c6d189062-1-83918f"}
+{"event": "worker_stopped", "worker_id": "ba8c6d189062-1-83918f"}
+
+discmon-task17d-actual-worker-idle
+actual-idle exit=0

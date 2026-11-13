@@ -21,16 +21,22 @@ WORKER_ID = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 _running = True
 
 
-def _install_signal_handlers() -> None:
-    global _running
+def _install_signal_handlers(wakeup: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
 
-    def stop(*_: object) -> None:
+    def stop() -> None:
+        global _running
         _running = False
+        wakeup.set()
+
+    def request_stop(*_: object) -> None:
+        # Observe shutdown on the loop, not between the claim guard and its call.
+        loop.call_soon_threadsafe(stop)
 
     for name in ("SIGINT", "SIGTERM"):
         if hasattr(signal, name):
             try:
-                signal.signal(getattr(signal, name), stop)
+                signal.signal(getattr(signal, name), request_stop)
             except (ValueError, OSError):
                 pass
 
@@ -162,6 +168,9 @@ async def run_once() -> int:
         await session.commit()
     while _running:
         async with async_session_factory() as session:
+            if not _running:
+                break
+            # A claim already underway must commit and finish its job, even on shutdown.
             job = await claim_job(session, WORKER_ID)
             await session.commit()
         if job is None:
@@ -196,12 +205,16 @@ async def run_once() -> int:
 
 
 async def run_forever() -> None:
-    _install_signal_handlers()
+    wakeup = asyncio.Event()
+    _install_signal_handlers(wakeup)
     print(json.dumps({"event": "worker_started", "worker_id": WORKER_ID}), flush=True)
     while _running:
         processed = await run_once()
-        if processed == 0:
-            await asyncio.sleep(2.0)
+        if processed == 0 and _running:
+            try:
+                await asyncio.wait_for(wakeup.wait(), timeout=2.0)
+            except TimeoutError:
+                pass
     print(json.dumps({"event": "worker_stopped", "worker_id": WORKER_ID}), flush=True)
 
 
