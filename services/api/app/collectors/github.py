@@ -79,8 +79,21 @@ class GitHubAdapter(SourceAdapter):
                 )
             try:
                 items = json.loads(response.content)
+                if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+                    raise ValueError("Expected a GitHub API array of objects")
             except ValueError:
-                continue
+                error = HttpResponse(
+                    url=url,
+                    status_code=response.status_code,
+                    headers=response.headers,
+                    content=response.content,
+                    elapsed_ms=elapsed,
+                    error_class="invalid_response",
+                    error_message="GitHub returned malformed JSON or an unexpected response shape",
+                )
+                return fetch_result_from_response(
+                    source, error, content_json=None, scan_complete=False, source_url=url
+                )
             bodies.append(response.content)
             for item in items if isinstance(items, list) else []:
                 if isinstance(item, dict):
@@ -113,6 +126,8 @@ class GitHubAdapter(SourceAdapter):
                 continue
             repo = entry.get("repo")
             item = entry.get("item") or {}
+            if mode == "issues" and "pull_request" in item:
+                continue
             title = str(item.get("name") or item.get("title") or "").strip()
             url = item.get("html_url")
             if not title or not url:
@@ -131,12 +146,12 @@ class GitHubAdapter(SourceAdapter):
                 provider_key=f"github:{repo}:{mode}:{external}",
                 title=title,
                 organization_name=owner,
-                organization_domain=domain_of(canonical),
+                organization_domain=None,
                 opportunity_type=classify_opportunity(title, text),
                 description_summary=excerpt(text, 1200),
                 requirements_summary=excerpt(text, 2000),
                 official_url=canonical,
-                application_url=canonical,
+                application_url=None,
                 compensation=parse_compensation_text(text),
                 published_at=published,
                 deadline_on=deadline["deadline_on"],
@@ -145,6 +160,7 @@ class GitHubAdapter(SourceAdapter):
                 deadline_precision=deadline["deadline_precision"],
                 source_payload={
                     "repo": repo,
+                    "item": item,
                     "release_id": item.get("id"),
                     "tag_name": item.get("tag_name"),
                     "number": item.get("number"),
