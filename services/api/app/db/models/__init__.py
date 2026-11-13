@@ -12,6 +12,7 @@ from app.db.models.opportunity import (
     Organization,
 )
 from app.db.models.review import Review
+from app.db.models.runtime_schedule import RuntimeSchedule
 from app.db.models.source import Source, SourceRun
 from app.db.models.sync import SyncOutbox, SyncState
 from app.db.models.user import UserProfile
@@ -30,6 +31,7 @@ __all__ = [
     "Organization",
     "RawEvidence",
     "Review",
+    "RuntimeSchedule",
     "Source",
     "SourceRun",
     "SyncOutbox",

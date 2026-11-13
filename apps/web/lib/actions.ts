@@ -4,6 +4,58 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { ApiError, apiSend } from "./api";
+import { api } from "./api";
+import type { RuntimeSchedule } from "./types";
+
+export type RuntimeScheduleResult =
+  | { ok: true; schedule: RuntimeSchedule }
+  | { ok: false; message: string }
+  | { ok: false; conflict: true; schedule: RuntimeSchedule | null; message: string };
+
+export async function loadRuntimeScheduleAction(): Promise<RuntimeScheduleResult> {
+  try {
+    return { ok: true, schedule: await api.runtimeSchedule() };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof ApiError
+          ? error.message
+          : "Could not load the saved runtime schedule. Check the API connection and retry.",
+    };
+  }
+}
+
+export async function saveRuntimeScheduleAction(input: {
+  revision: number;
+  start_time: string;
+  shutdown_time: string;
+}): Promise<RuntimeScheduleResult> {
+  try {
+    const schedule = await apiSend<RuntimeSchedule>("/runtime-schedule", "PUT", input);
+    revalidatePath("/settings");
+    return { ok: true, schedule };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      const latest = await loadRuntimeScheduleAction();
+      return {
+        ok: false,
+        conflict: true,
+        schedule: latest.ok ? latest.schedule : null,
+        message: latest.ok
+          ? "This schedule changed elsewhere. The latest saved values have been loaded; review them before saving again."
+          : `This schedule changed elsewhere, but the latest values could not be loaded. ${latest.message}`,
+      };
+    }
+    return {
+      ok: false,
+      message:
+        error instanceof ApiError
+          ? error.message
+          : "Could not save the runtime schedule. Check the API connection and retry.",
+    };
+  }
+}
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
