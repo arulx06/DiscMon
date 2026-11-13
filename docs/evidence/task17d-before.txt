@@ -1,0 +1,94 @@
+$ cd services/api && ../../.venv/bin/pytest tests/test_worker_shutdown.py -k "idle and SIGTERM" -v -s
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.7.0 -- /tmp/hoplite/workspace/repo-repo_1455581295/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/hoplite/workspace/repo-repo_1455581295/services/api
+configfile: pyproject.toml
+plugins: asyncio-1.5.0, anyio-4.16.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items / 10 deselected / 1 selected
+
+tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[idle-SIGTERM] mode=idle SIGTERM-to-exit=4.095s exit=0
+FAILED
+
+=================================== FAILURES ===================================
+______________ test_signal_preserves_worker_outcome[idle-SIGTERM] ______________
+
+session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x7fbc3c1b2090>
+tmp_path = PosixPath('/tmp/pytest-of-hoplite/pytest-4/test_signal_preserves_worker_o0')
+mode = 'idle', signal_name = 'SIGTERM'
+
+    @pytest.mark.parametrize("signal_name", ["SIGTERM", "SIGINT"])
+    @pytest.mark.parametrize("mode", ["idle", "success", "failure", "claim", "commit"])
+    async def test_signal_preserves_worker_outcome(session, tmp_path, mode, signal_name):
+        now = now_utc()
+        pending = Job(
+            kind=JobKind.deliver_alert, idempotency_key="pending-preserved",
+            available_at=now + timedelta(days=1), payload_json={"provenance": "pending"},
+        )
+        opportunity = Opportunity(
+            title="Preserve opportunity", official_url="https://example.com/preserved",
+            first_seen_at=now, last_seen_at=now,
+        )
+        session.add_all([pending, opportunity])
+        if mode != "idle":
+            active = Job(
+                kind=JobKind.deliver_alert, idempotency_key="active-fixture",
+                available_at=now - timedelta(seconds=2), payload_json={"provenance": "active"},
+            )
+            following = Job(
+                kind=JobKind.deliver_alert, idempotency_key="next-must-not-be-claimed",
+                available_at=now - timedelta(seconds=1),
+            )
+            session.add_all([active, following])
+        await session.commit()
+        preserved = [(row, row_values(row)) for row in [pending, opportunity]]
+        if mode != "idle":
+            preserved.append((following, row_values(following)))
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "tests.worker_process", mode, str(tmp_path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            marker = tmp_path / ("idle" if mode == "idle" else "waiting")
+            async with asyncio.timeout(10):
+                while not await asyncio.to_thread(marker.exists):
+                    assert process.returncode is None
+                    await asyncio.sleep(0.005)
+            if mode != "idle":
+                async with asyncio.timeout(5):
+                    while not await session.scalar(  # noqa: ASYNC110 - observe child DB state
+                        text(
+                            "SELECT count(*) FROM pg_stat_activity "
+                            "WHERE application_name = 'discmon-task17d-worker' "
+                            "AND wait_event = 'PgSleep'"
+                        )
+                    ):
+                        await session.commit()
+                        await asyncio.sleep(0.005)
+            claims_at_signal = int((tmp_path / "claims").read_text())
+            started = time.monotonic()
+            process.send_signal(getattr(signal, signal_name))
+            if mode != "idle":
+                await asyncio.sleep(0.1)
+                assert process.returncode is None, "Must finish the in-flight transaction/job"
+        finally:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=12)
+        elapsed = time.monotonic() - started
+        print(f"mode={mode} {signal_name}-to-exit={elapsed:.3f}s exit={process.returncode}")
+        assert process.returncode == 0, stderr.decode()
+>       assert not (tmp_path / "watchdog").exists(), "Signal did not stop worker"
+E       AssertionError: Signal did not stop worker
+E       assert not True
+E        +  where True = exists()
+E        +    where exists = (PosixPath('/tmp/pytest-of-hoplite/pytest-4/test_signal_preserves_worker_o0') / 'watchdog').exists
+
+tests/test_worker_shutdown.py:90: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_worker_shutdown.py::test_signal_preserves_worker_outcome[idle-SIGTERM]
+======================= 1 failed, 10 deselected in 4.96s =======================
+
+real	0m5.597s
+user	0m1.397s
+sys	0m0.151s
+pytest exit=1
