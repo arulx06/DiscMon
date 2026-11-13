@@ -35,9 +35,10 @@ acceptance evidence.
 A clean-volume drill is future work and requires separate explicit
 authorization plus a pinned commit checked out fresh in a disposable worktree
 with no production `.env`, secrets or credentials available. Use a disposable
-project, network and volume and a test-only override that removes secrets
-mounts and routes PostgreSQL to isolated test-only database/user/credentials.
-Bind only on confirmed nonconflicting localhost ports.
+project, private/ingress networks and volume and a test-only override that removes
+secrets mounts and routes PostgreSQL to isolated test-only database/user/credentials.
+Bind only API/web on confirmed nonconflicting localhost ports; PostgreSQL
+remains internal at `postgres:5432`. The obsolete `--db-port` option is rejected.
 
 Wait for PostgreSQL 18 readiness. If a migration is separately authorized,
 check the API directly at `http://127.0.0.1:<api-port>/health/live` and
@@ -71,9 +72,12 @@ See
 [deployment](deployment.md#isolated-smoke-configuration-task-3) for ports and
 options. This fixed base+smoke render does not query the daemon, read private
 config, start containers, build, migrate, seed, scan or send notifications.
-Default/all-profile model contains only postgres/API/web on an internal bridge,
-with no secret binds and no production port mappings. Credentials are public
-test-only values. Do not use the production preflight's `--check-host` as proof
+Default/all-profile model contains only postgres/API/web. PostgreSQL attaches
+only to the scoped internal `private` bridge and has no host port; API/web also
+attach to a scoped ordinary `ingress` bridge for their loopback publications.
+There are no secret binds or production port mappings. Ingress may allow
+API/web outbound traffic: do not claim complete egress isolation. Credentials are
+public test-only values. Do not use the production preflight's `--check-host` as proof
 of smoke-port availability; it checks the production configuration's ports.
 
 **Separate explicit owner authorization is required before every runtime drill.**
@@ -95,11 +99,12 @@ The proposed procedure, not executed in Task 3, is:
    verified isolated target if explicitly authorized; source import/seed,
    ingestion, worker/scheduler startup, scans and notifications remain forbidden
    unless separately authorized. Check API live/ready directly and web root
-   independently. Verify effective localhost exposure and internal-bridge
-   routing; static config does not establish this runtime behavior.
+   independently. Verify actual API/web loopback publication through ingress,
+   PostgreSQL private-only membership/no host ports, and internal service routing;
+   static config does not establish this runtime behavior.
 5. Record a post-drill inventory and compare it to the baseline. Before cleanup,
-   positively match each created ID to the run's creation record, project labels
-   and expected service/resource name. Refuse ambiguous ownership. Remove only
+   positively match each created container and both network IDs to the run's
+   creation record, project labels and expected service/resource name. Refuse ambiguous ownership. Remove only
    those specific IDs; never blanket-prune, remove by prefix alone, or use
    `docker compose down -v`. Verify baseline resources are unchanged and all
    owned runtime resources are gone; record any leftover images explicitly.
@@ -109,6 +114,22 @@ race between inventory and resource creation remains possible: refuse conflicts
 rather than adopting resources. Static validation cannot prove freshness,
 resource ownership, port availability or runtime health. **M0 remains PARTIAL**
 until the separately authorized drill provides that evidence.
+
+## Network correction boundary (static only)
+
+Retry 1's original logs show a healthy PostgreSQL 18.7 container with configured
+loopback port bindings but no actual published mapping. API, SQL proof, migration
+and web were not attempted. This is observed incompatibility under that topology,
+not conclusive proof of an Engine defect. See the session's original Retry 1
+transcript and cleanup inventory; do not replace those logs with new test output.
+
+The revised design removes PostgreSQL host publication and separates ingress.
+No runtime acceptance follows from successful static rendering. Before a later,
+separately authorized drill, recheck both network identities and attachments:
+PostgreSQL on private only; API/web on private and ingress; no aliases, extra
+networks or external resources. Prove the actual API database target and PostgreSQL
+server identity before any authorized migration. Check Alembic revision separately
+from `/health/ready` (which only runs `SELECT 1`). Never seed or ingest.
 
 ## Daily
 

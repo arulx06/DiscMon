@@ -1,5 +1,48 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 4B smoke-network compatibility correction (STATIC ONLY)
+
+- Started from accepted handoff commit `edc2fa5b5a2e4dbe7a93611b1ade65f21b6018b6`,
+  verified by fresh fetch and remote-head query. New isolated worktree
+  `discmon-smoke-network-correction`, branch `hoplite/kios-4aac7279--smoke-networks`.
+  All older checkouts preserved; no application/production Compose/preflight/CI edits.
+- Retry 1 evidence shows a healthy PostgreSQL 18.7 container with requested
+  loopback bindings but null actual publication on an internal-only bridge.
+  This is not conclusive proof of an Engine bug. Original evidence remains at
+  [Retry 1 report](https://api.hoplite.sh/api/attachments/1a164faf72bc40b2ac23627a83778060?media=file)
+  and [original transcript](https://api.hoplite.sh/api/attachments/71d67a3504a54311840a3d919e01d3a0?media=file).
+- Smoke now uses scoped `private` (internal) and `ingress` (ordinary) bridges.
+  PostgreSQL is private-only with no host port; API/web join both and publish
+  only loopback 38000/33000. `--db-port` is rejected. Network definitions and
+  service attachments are replaced, not appended. Exact validation still
+  rejects extra services/networks/aliases/env/mounts/profiles/external storage.
+- Ingress may allow API/web outbound traffic. Disabled integrations are not
+  a firewall; this is explicitly not complete egress isolation. DB routing,
+  test-only credentials and scoped storage remain unchanged. README updated
+  only to remove obsolete flags, ports and egress claims.
+- Local Python 3.12.3 / Compose 2.40.3 verification (all sanitized invocations):
+  - `python3 -B -m unittest discover -s scripts/tests -p 'test_compose_*.py' -v`:
+    `Ran 38 tests in 1.496s`, `OK`, exit 0; 19 unchanged preflight + 19 smoke,
+    no skips. Four real-Compose test methods exercise default/custom rendering,
+    hostile synthetic env inputs and unsafe merge/mount/config rejections.
+  - `python3 -B scripts/compose_preflight.py --project discmon-preflight-network-20261113-a83c`:
+    `CONFIG PASS`, exit 0; production checks unchanged, no host-check mode.
+  - `python3 -B scripts/compose_smoke.py --project discmon-smoke-network-20261113-a83c`:
+    `SMOKE CONFIG PASS`, exit 0 (actual default Compose render).
+  - `python3 -B scripts/compose_smoke.py --project discmon-smoke-network-20261113-b94d --api-port 38001 --web-port 33001`:
+    `SMOKE CONFIG PASS`, exit 0 (actual custom-port render).
+  - Same custom project with `--db-port 56432`: expected `SMOKE REFUSED`, exit 1.
+  - AST syntax checks and `git diff --check`: exit 0.
+- Read-only identity verification matched the local socket and daemon
+  `c6bf35ec-c0e0-4031-b334-8d58d2f76d58` before inventory. Fresh metadata exactly
+  matches Retry 1's final snapshot: zero containers/volumes, same three network
+  IDs/labels/attachments and retained images. This corroborates cleanup now,
+  not an audit of every intervening host action. Original logs are preserved.
+- No local build/pull/start/stop/SQL/migration/cleanup or runtime mutation in
+  this correction. Runtime publication compatibility is **not verified**;
+  a later drill requires new explicit owner authorization. **M0 remains PARTIAL**.
+
+
 Dates: 2026-10-30 (historical status) and 2026-11-12 (stabilization checkpoint)
 Authority: docs/specification.md
 
