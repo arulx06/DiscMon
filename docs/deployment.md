@@ -44,6 +44,68 @@ capabilities and suppresses CLI diagnostics that might contain secrets. Host
 checks also inspect published Docker TCP ports, including NAT-only mappings,
 not just socket listeners.
 
+## Isolated smoke configuration (Task 3)
+
+This is **configuration design and static verification only**, not an M0
+runtime drill. Use Python 3.12+ and system-installed Docker Compose v2 >=
+2.24.4 or v5. Compose's [merge rules](https://docs.docker.com/reference/compose-file/merge/)
+append distinct port mappings; ordinary port lists are unsafe here. Explicit
+`!override` replaces ports/environments/volume definitions, while `!reset`
+removes private mounts, unused environment anchors and entire unwanted services.
+
+```bash
+python3 scripts/compose_smoke.py --project discmon-smoke-20261113-a17c
+# Alternative non-production bindings (still static only):
+python3 scripts/compose_smoke.py --project discmon-smoke-20261113-b28d \
+  --db-port 56433 --api-port 38001 --web-port 33001
+```
+
+If needed, use the README's `env -u` wrapper for this static invocation only.
+The validator accepts only the explicit project and three port options, never
+arbitrary files, environment files, profiles or a host-check mode. It reuses
+the existing preflight's redacted CLI runner and safety exception without
+changing the production preflight. The subprocess environment contains only a
+system PATH, empty temporary HOME/Docker config, locale and validated smoke
+project/port values. Both Compose paths are fixed and absolute, `/dev/null` is
+the explicit env file, and `config --no-env-resolution --format json` is the
+only render operation. `--profile '*'` verifies exclusions even if all profiles
+were requested. No Docker daemon query occurs; malformed/unsupported rendering
+fails without forwarding CLI output or credentials.
+
+Resolved default model:
+
+| Item | Smoke-only configuration |
+| --- | --- |
+| Project | Explicit `discmon-smoke-<8–40 lowercase unique suffix>`; protected names rejected |
+| Services | Exactly postgres, api, web; none has profiles or restart loops |
+| PostgreSQL | `postgres:18-alpine`, database `discmon_smoke_test`, user `discmon_smoke_user` |
+| Database route | API uses only `postgres:5432/discmon_smoke_test`; exact test credentials required |
+| Readiness | `pg_isready -U discmon_smoke_user -d discmon_smoke_test` |
+| Web route | `http://api:8000`; test token matches authenticated API |
+| Host ports | PostgreSQL `127.0.0.1:56432`, API `127.0.0.1:38000`, web `127.0.0.1:33000` |
+| Storage | Only `<project>_pgdata` at `/var/lib/postgresql`; no external/custom storage or host binds |
+| Network | Only `<project>_default`, internal bridge; no external networks or host routing |
+| Excluded | Worker, scheduler and changedetection removed, not merely hidden behind profiles |
+| Integrations | No provider credentials/endpoints; Sheets/AI false; ordinary external egress blocked |
+
+The overlay requires an explicit `DISCMON_SMOKE_PROJECT` when used directly;
+only the validator enforces the naming/port/resource policy. Do not invoke raw
+Compose to bypass validation. Public test-only placeholder passwords/tokens
+must never be repurposed for production. No production `.env`, private Docker
+configuration, repository secrets or backup mounts are loaded. API/web have no
+runtime bind mounts, and build contexts are restricted to their existing
+Dockerfiles; **no builds are executed here**.
+
+Static success is not proof that the proposed volume/network names are unused,
+ports are free, published ports on the internal bridge work on the target
+engine, or the database/API/web are healthy. No schema is created or migrated.
+The API image does not automatically migrate or seed. API readiness checks
+only `SELECT 1`, not schema compatibility; the web dashboard needs migrated
+tables, so web-root acceptance requires a separately authorized isolated
+migration. Source import and UI scan/notification actions are outside the smoke
+procedure. Runtime network isolation does not constrain build-time registry or
+package access. M0 stays **PARTIAL**.
+
 ## Local deployment (Windows/macOS/Linux)
 
 The following is a deployment, not a preflight. Run it only after explicit
@@ -68,9 +130,8 @@ This drill is future work, separate from the non-mutating preflight, and
 has not been performed as part of Task 2. It needs separate explicit
 authorization and a pinned commit checked out fresh in a disposable worktree,
 with no production `.env`, secrets or credentials available. Use a disposable
-Compose project, network and database volume, with a reviewed test-only
-override that removes secret mounts and supplies isolated test-only database,
-user and credentials. Bind services only to confirmed nonconflicting
+Compose project, network and database volume, with the reviewed Task 3 base + smoke
+override and validator described above (never the dev overlay). Bind services only to confirmed nonconflicting
 localhost ports.
 
 Wait for PostgreSQL 18 readiness before any separately authorized migration.

@@ -1,5 +1,155 @@
 # Changelog
 
+## 2026-11-13 — Task 3: isolated Compose smoke model (STATIC ONLY)
+
+### A. Verified checkpoint and worktrees
+
+- `gh api repos/arulx06/DiscMon/pulls/2` returned `merged=true`, `state=closed`,
+  base `handoff/stabilize-idfc-audit-20261112`, approved head
+  `832026c26954a80bae492afdec7b23f4e4c76211`, squash merge
+  `685ccd3352d7936f5c0dadd95df17e61d4bf8b74`.
+- `git fetch origin handoff/stabilize-idfc-audit-20261112` and
+  `git rev-parse FETCH_HEAD` returned exactly that squash SHA. Its single parent
+  is accepted checkpoint `739192275e7d4f239afa2430e36acfd8419feec9`.
+- `git fetch origin refs/pull/2/head` followed by
+  `git diff --exit-code FETCH_HEAD 685ccd3352d7936f5c0dadd95df17e61d4bf8b74 -- scripts/compose_preflight.py scripts/tests/test_compose_preflight.py`
+  exited 0: both approved Task 2 files are byte-identical at the new baseline.
+- `git worktree add -b hoplite/m0-isolated-compose-smoke-20261113 ../discmon-task3 685ccd3352d7936f5c0dadd95df17e61d4bf8b74`
+  exited 0. No prior worktree reused or reset. Original worktree remains on
+  `hoplite/samos-f2115cb5` at `2c31234e1ece52f988aa6e9aded32f6c55feefd3`, clean.
+
+### B. Implementation and resolved model
+
+Changed files (only this bounded scope):
+
+- `docker-compose.smoke.yml` — new test-only override.
+- `scripts/compose_smoke.py` — new fixed-input redacted static validator.
+- `scripts/tests/test_compose_smoke.py` — focused unit and actual-render tests.
+- `.github/workflows/ci.yml` — additional static smoke-render step only.
+- `README.md`, `docs/deployment.md`, `docs/operations-runbook.md`,
+  `docs/PROGRESS.md`, `docs/changelog.md` — usage, limits and evidence.
+
+The production/dev YAML and both Task 2 Python files have no diff. Application,
+schema, migrations, worker/scheduler and frontend behavior are unchanged.
+
+Actual Compose 2.40.3 rendering of base + smoke with **all** profiles enabled
+contains exactly postgres/API/web, none profiled, all `restart: no`. Worker,
+scheduler and changedetection are removed, including the changedetection volume
+and unused base environment extension. `!override` replaces published ports
+and environments; `!reset` removes services/private mounts. Default model:
+
+```text
+project: discmon-smoke-20261113-a17c
+postgres: postgres:18-alpine; 127.0.0.1:56432 -> 5432/tcp
+api: 127.0.0.1:38000 -> 8000/tcp; no volumes
+web: 127.0.0.1:33000 -> 3000/tcp; no volumes
+volume: discmon-smoke-20261113-a17c_pgdata -> /var/lib/postgresql
+network: discmon-smoke-20261113-a17c_default; internal bridge
+API DB: postgres:5432/discmon_smoke_test; user discmon_smoke_user
+web API: http://api:8000; matching test-only auth token
+PG health: pg_isready -U discmon_smoke_user -d discmon_smoke_test
+```
+
+The static validator verifies cross-service database username/password/database
+consistency without printing values. No external resources, host storage,
+private mounts, fixed container names, env files, optional integrations or
+inherited production bindings are accepted. Credentials are public test-only
+placeholders, never production secrets. No images were built.
+
+### C. Local verification
+
+Environment: Python 3.12.3, Docker CLI 29.1.3, system Compose
+2.40.3+ds1-0ubuntu1~24.04.1. Docker engine availability was **not queried**;
+a daemon is unnecessary for config rendering.
+
+Exact static invocations below all exited 0:
+
+```bash
+python3 -m unittest discover -s scripts/tests -v
+python3 -m py_compile scripts/compose_preflight.py scripts/compose_smoke.py scripts/tests/test_compose_preflight.py scripts/tests/test_compose_smoke.py
+git diff --check
+git diff --exit-code 685ccd3352d7936f5c0dadd95df17e61d4bf8b74 -- docker-compose.yml docker-compose.dev.yml scripts/compose_preflight.py scripts/tests/test_compose_preflight.py
+
+env -u COMPOSE_FILE -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES \
+  -u COMPOSE_PROFILES -u DOCKER_HOST -u DOCKER_CONTEXT \
+  python3 scripts/compose_smoke.py --project discmon-smoke-20261113-a17c
+
+env -u COMPOSE_FILE -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES \
+  -u COMPOSE_PROFILES -u DOCKER_HOST -u DOCKER_CONTEXT \
+  python3 scripts/compose_smoke.py --project discmon-smoke-20261113-b28d \
+  --db-port 56433 --api-port 38001 --web-port 33001
+
+env -u COMPOSE_FILE -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES \
+  -u COMPOSE_PROFILES -u DOCKER_HOST -u DOCKER_CONTEXT \
+  python3 scripts/compose_preflight.py --project discmon-preflight-20261113-a17c
+```
+
+Observed output: `Ran 37 tests in 1.314s`, `OK`; **37 passed, 0 failed,
+0 skipped**, exit 0. This comprises 19 unchanged production preflight tests and
+18 smoke tests. Four test methods use **actual Compose** (existing base/dev
+fresh-copy and malformed config; new default/custom-port hostile-env checks and
+negative port-merge/secret-mount/malformed-YAML cases). The other 32 methods use
+fixture-only/mocked paths, plus one existing real ephemeral socket probe.
+Version/capability refusal is simulated; actual v2.40.3 rendering is not mocked.
+
+Smoke negative cases cover protected project names, reused/external/custom
+resources, binds/secrets, retained production or public ports, enabled workers/
+scheduler/changedetection/profiles, canonical/remote/mismatched DB routing,
+missing/wrong PostgreSQL image/healthcheck, malformed JSON/YAML, credential
+leakage, unsupported capabilities and inherited/unknown CLI routing inputs.
+Actual negative renders fail closed; no unsafe input is executed as a service.
+
+The initial smoke invocation without unsetting inherited routing inputs refused
+with exit 1 and the redacted error `Unexpected inherited Compose/Docker routing
+input; unset it before static inspection.` This was the expected safeguard,
+not a render pass. Only later static invocations deliberately removed those
+inputs; no daemon or remote host check was attempted.
+
+### Automatic CI and delivery
+
+Implementation commit `dd2c23a` passed every job (backend, web,
+compose-preflight) on both automatically triggered runs:
+
+- Push: https://github.com/arulx06/DiscMon/actions/runs/43336543594 — **success**.
+- PR: https://github.com/arulx06/DiscMon/actions/runs/43336552350 — **success**.
+
+CI's system Compose **v5.1.3** passed all **37** unit/static tests, the real
+smoke render and the unchanged production host checks. Backend PostgreSQL 18:
+`111 passed, 1 warning` (existing feedparser deprecation), Ruff `All checks
+passed!`, mypy `Success: no issues found in 61 source files`. Web typecheck,
+lint and build passed. No workflow was dispatched or rerun manually. Existing
+CI alone runs its pre-existing ephemeral test database migration; no local DB,
+manual migration or smoke runtime drill was performed.
+
+PR https://github.com/arulx06/DiscMon/pull/3 targets
+`handoff/stabilize-idfc-audit-20261112`, stays open/unmerged, and is linked to
+update monitoring with `reviewLoop.enabled=true`, `autoMerge=false`.
+GitHub auto-merge request is null. Both worktrees were preserved; original
+checkout remains clean and the new feature worktree is committed. This
+follow-up only records observed CI evidence; runtime acceptance remains pending.
+
+### D. Safety and remaining acceptance gaps
+
+Locally, Docker subprocesses were restricted to `compose version`, `compose
+config --help` and `compose config`. No `info`, runtime inventory, container
+start/stop/restart/build, compose up/down/run/exec, DB connection, migration
+(including test migration), source seed/ingestion, backup/restore or volume
+operation was performed. Temporary test inputs and HOME/Docker config directories
+are ordinary local files, not Docker resources. Existing preflight host-failure
+paths are mocked; its occupied-port test uses only an ephemeral local socket.
+No production `.env`, repository secrets or private Docker configuration was
+read; synthetic hostile test files are generated only inside temporary copies.
+
+Static success proves the **configuration model**, not resource freshness,
+port availability, Docker engine availability, effective networking, app health
+or clean-checkout acceptance. API readiness only checks `SELECT 1`, not migrated
+schema; the web dashboard needs schema. Future explicit owner authorization is
+required for resource inventory, isolated build/start/volume creation, verified
+isolated migration, direct API live/ready plus independent web checks, and
+cleanup of only IDs positively matched to this run's inventory and labels.
+Source import, ingestion and worker/scheduler startup remain separately gated.
+No `compose down -v` or blanket pruning is permitted. M0 remains **PARTIAL**.
+
 ## 2026-11-12 — Task 2: non-destructive Compose preflight
 
 ### Scope and safety

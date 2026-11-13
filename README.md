@@ -74,6 +74,36 @@ list queries plus local socket bind probes. It requires an available Docker
 daemon and still does not prove that resources are disposable or fresh. The
 preflight is an inspection only, not approval to start or modify anything.
 
+## Isolated smoke configuration (static only)
+
+Task 3 adds `docker-compose.smoke.yml`, checked by a separate config-only
+validator. No runtime drill is authorized by this command:
+
+```bash
+python3 scripts/compose_smoke.py --project discmon-smoke-20261113-a17c
+```
+
+It renders **only base + smoke**, never the dev overlay, under a sanitized
+environment with an empty env file and private Docker config disabled. It
+requires system-installed Compose **v2 >= 2.24.4 or v5**, including `!override`
+and `!reset` support; unsupported renderers fail closed. The six inherited
+Compose/Docker routing variables listed above must be unset for this static
+invocation. No daemon access or host checks occur.
+
+Only PostgreSQL 18, API and web remain. Default bindings are
+`127.0.0.1:56432`, `127.0.0.1:38000` and `127.0.0.1:33000`; optional
+`--db-port`, `--api-port` and `--web-port` change these without loading shell
+settings. The isolated database is `discmon_smoke_test`. All credentials are
+public **test-only placeholders**, not deployment secrets. There are no bind
+mounts, workers, scheduler or optional integrations; an internal bridge blocks
+ordinary external egress. The old production preflight and Compose files are
+unchanged.
+
+Static validation proves the intended model, **not** resource freshness, free
+ports, effective runtime networking or app health. M0 remains **PARTIAL**.
+See [deployment](docs/deployment.md#isolated-smoke-configuration-task-3)
+for the model, safeguards and separately authorized future drill.
+
 ## Quick start (Docker Compose deployment)
 
 > **This is a state-changing deployment, not the Task 2 preflight.** Starting
