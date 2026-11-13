@@ -160,7 +160,7 @@ was removed before the deterministic full suite and is not collected in CI.
 pytest tests/test_wikimedia_outreachy.py -q  # before full-time correction
 1 failed, 1 passed in 0.47s (employment_conflict was False)
 pytest tests/test_wikimedia_outreachy.py tests/test_discovery_to_sheets.py -q
-4 passed in 0.78s
+4 passed in 0.77s
 pytest tests/_task6_live.py -q -s  # temporary live-only ASGI/service harness
 1 passed in 3.88s
 pytest tests -q
@@ -173,8 +173,13 @@ git diff --check
 exit 0
 ```
 
-GitHub CI status is recorded on the review PR after publication; no unobserved
-CI success is claimed here. M5 remains **PARTIAL**: real authenticated Sheets
+GitHub CI completed successfully for implementation head
+`9416337455fb273c612f8f8c64ef573284d6702f`: [push run 43419813208](https://github.com/arulx06/DiscMon/actions/runs/43419813208)
+and [PR run 43419845874](https://github.com/arulx06/DiscMon/actions/runs/43419845874),
+with backend, web and compose-preflight all green in both runs. Independent
+read-only review requested an additional explicit unknown-professional-eligibility
+assertion; it was added and the focused tests reran successfully (output above).
+The PR records CI for the final documentation/assertion follow-up head. M5 remains **PARTIAL**: real authenticated Sheets
 delivery/reconciliation, live external notification delivery, production source
 approval/legal review, and broader programme-field/round extraction remain
 unverified. The broad article selector and heuristic category are known limits;

@@ -65,6 +65,7 @@ def test_wikimedia_outreachy_preserves_full_time_constraint_and_field_origins() 
     assert candidate.employment_conflict is True
     eligibility = assess_eligibility(candidate)
     assert eligibility.india_eligibility == EligibilityStatus.unknown
+    assert eligibility.professional_eligibility == EligibilityStatus.unknown
 
 
 async def test_wikimedia_www_host_survives_fetch_and_promotion_validation(monkeypatch) -> None:

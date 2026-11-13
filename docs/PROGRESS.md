@@ -14,13 +14,16 @@
   was HTTP 304: one opportunity/revision, no new material change. Fake Sheets
   appended/synced once, then no-op; committed PostgreSQL records reloaded.
 - New minimal attributed CC-BY-SA fixture and three deterministic regressions;
-  PR #5 connected-flow regression unchanged. Focused: **4 passed in 0.78s**;
+  PR #5 connected-flow regression unchanged. Focused: **4 passed in 0.77s**;
   live-only harness: **1 passed in 3.88s**; full backend: **115 passed, 1 warning
   in 25.56s** (existing feedparser deprecation). Ruff: `All checks passed!`;
   mypy: `Success: no issues found in 61 source files`; `git diff --check`: exit 0.
 - [Detailed source permission, IDs, provenance, assessment and test evidence](task6-real-programme-validation.md).
   **M5 remains PARTIAL**; real Sheets/external delivery is not verified. GitHub
-  CI is reported on the review PR; no unobserved result is claimed.
+  CI runs **43419813208 (push)** and **43419845874 (PR)** succeeded on
+  implementation head `9416337` (backend, web, compose-preflight). A final
+  focused rerun also protects unknown professional eligibility; final-head CI
+  is reported on the review PR.
 
 ## 2026-11-13 — M5 connected-flow regression (local verification)
 
