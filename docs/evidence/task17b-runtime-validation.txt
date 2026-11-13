@@ -1,0 +1,482 @@
+Task 17B offline validation — 2026-11-13 UTC
+Original workspace: 2c31234; accepted checkpoint: 8c54d70; implementation base: bdc653f.
+Branch: task17b/editable-runtime-schedule
+Only isolated PostgreSQL16 (discmon_runtime_test, loopback port 55439), local API/web,
+mocked Docker/systemd, temporary files and synthetic credentials are used.
+No live database, Docker start/stop, systemd install/enable, ingestion, deployment or merge.
+Earlier development runs found/fixed snapshot schema bool acceptance, test expectation
+changes for completed failed backups, and private-state setup needed by old main mocks.
+Initial preview needed explicit local app selection and isolated DB migrations; recovered.
+
+$ python -m unittest discover -s scripts/tests -v
+test_actual_occupied_local_port_probe (test_compose_preflight.PreflightTests.test_actual_occupied_local_port_probe) ... ok
+test_compose_unavailable_invalid_config_and_secret_diagnostics (test_compose_preflight.PreflightTests.test_compose_unavailable_invalid_config_and_secret_diagnostics) ... ok
+test_daemon_unavailable (test_compose_preflight.PreflightTests.test_daemon_unavailable) ... ok
+test_docker_nat_published_ports_rejected_without_socket_listener (test_compose_preflight.PreflightTests.test_docker_nat_published_ports_rejected_without_socket_listener) ... ok
+test_existing_resources_by_name_and_label_rejected (test_compose_preflight.PreflightTests.test_existing_resources_by_name_and_label_rejected) ... ok
+test_external_or_ambiguous_db_routing (test_compose_preflight.PreflightTests.test_external_or_ambiguous_db_routing) ... ok
+test_host_success_read_only_inventory_and_bind_probes (test_compose_preflight.PreflightTests.test_host_success_read_only_inventory_and_bind_probes) ... ok
+test_inherited_routing_rejected_without_echo (test_compose_preflight.PreflightTests.test_inherited_routing_rejected_without_echo) ... ok
+test_invalid_json (test_compose_preflight.PreflightTests.test_invalid_json) ... ok
+test_missing_docker (test_compose_preflight.PreflightTests.test_missing_docker) ... ok
+test_missing_required_compose_capability (test_compose_preflight.PreflightTests.test_missing_required_compose_capability) ... ok
+test_occupied_port (test_compose_preflight.PreflightTests.test_occupied_port) ... ok
+test_project_identities_and_unknown_secret_input (test_compose_preflight.PreflightTests.test_project_identities_and_unknown_secret_input) ... ok
+test_real_compose_in_fresh_copy_ignores_dotenv_and_shell_secrets (test_compose_preflight.PreflightTests.test_real_compose_in_fresh_copy_ignores_dotenv_and_shell_secrets) ... ok
+test_real_invalid_configuration_suppresses_diagnostics (test_compose_preflight.PreflightTests.test_real_invalid_configuration_suppresses_diagnostics) ... ok
+test_static_success_only_capabilities_and_two_renders (test_compose_preflight.PreflightTests.test_static_success_only_capabilities_and_two_renders) ... ok
+test_supported_compose_v5_uses_identical_safety_checks (test_compose_preflight.PreflightTests.test_supported_compose_v5_uses_identical_safety_checks) ... ok
+test_unsafe_resource_definitions (test_compose_preflight.PreflightTests.test_unsafe_resource_definitions) ... ok
+test_unsupported_compose_version (test_compose_preflight.PreflightTests.test_unsupported_compose_version) ... ok
+test_compose_failure_diagnostics_are_suppressed (test_compose_smoke.ComposeSmokeTests.test_compose_failure_diagnostics_are_suppressed) ... ok
+test_enabled_worker_scheduler_changedetection_and_profiles_are_refused (test_compose_smoke.ComposeSmokeTests.test_enabled_worker_scheduler_changedetection_and_profiles_are_refused) ... ok
+test_inherited_compose_and_docker_routing_environment_is_refused (test_compose_smoke.ComposeSmokeTests.test_inherited_compose_and_docker_routing_environment_is_refused) ... ok
+test_invocation_uses_only_sanitized_static_compose_commands (test_compose_smoke.ComposeSmokeTests.test_invocation_uses_only_sanitized_static_compose_commands) ... ok
+test_malformed_json_and_resolved_config_are_suppressed (test_compose_smoke.ComposeSmokeTests.test_malformed_json_and_resolved_config_are_suppressed) ... ok
+test_missing_docker_cli_is_refused_without_invoking_compose (test_compose_smoke.ComposeSmokeTests.test_missing_docker_cli_is_refused_without_invoking_compose) ... ok
+test_postgres_image_and_healthcheck_must_be_exact (test_compose_smoke.ComposeSmokeTests.test_postgres_image_and_healthcheck_must_be_exact) ... ok
+test_postgres_ports_and_inherited_production_or_public_binds_are_refused (test_compose_smoke.ComposeSmokeTests.test_postgres_ports_and_inherited_production_or_public_binds_are_refused) ... ok
+test_protected_project_names_and_unsafe_ports_are_refused (test_compose_smoke.ComposeSmokeTests.test_protected_project_names_and_unsafe_ports_are_refused) ... ok
+test_real_compose_default_and_custom_ports_ignore_dotenv_and_private_inputs (test_compose_smoke.ComposeSmokeTests.test_real_compose_default_and_custom_ports_ignore_dotenv_and_private_inputs) ... ok
+test_real_compose_rejects_inherited_ports_secret_mount_and_malformed_yaml (test_compose_smoke.ComposeSmokeTests.test_real_compose_rejects_inherited_ports_secret_mount_and_malformed_yaml) ... ok
+test_remote_canonical_and_mismatched_database_urls (test_compose_smoke.ComposeSmokeTests.test_remote_canonical_and_mismatched_database_urls) ... ok
+test_reused_external_and_custom_volumes_or_networks_are_refused (test_compose_smoke.ComposeSmokeTests.test_reused_external_and_custom_volumes_or_networks_are_refused) ... ok
+test_secret_bind_and_extra_mounts_are_refused (test_compose_smoke.ComposeSmokeTests.test_secret_bind_and_extra_mounts_are_refused) ... ok
+test_sentinel_environment_and_credentials_are_not_echoed (test_compose_smoke.ComposeSmokeTests.test_sentinel_environment_and_credentials_are_not_echoed) ... ok
+test_service_network_routes_and_per_network_attributes_are_exact (test_compose_smoke.ComposeSmokeTests.test_service_network_routes_and_per_network_attributes_are_exact) ... ok
+test_unknown_and_duplicate_port_options_are_refused_before_compose (test_compose_smoke.ComposeSmokeTests.test_unknown_and_duplicate_port_options_are_refused_before_compose) ... ok
+test_unsupported_compose_versions_and_capabilities_refuse_before_config (test_compose_smoke.ComposeSmokeTests.test_unsupported_compose_versions_and_capabilities_refuse_before_config) ... ok
+test_valid_resolved_model_is_isolated_and_canonical (test_compose_smoke.ComposeSmokeTests.test_valid_resolved_model_is_isolated_and_canonical) ... ok
+test_0900_start_and_explicit_identity (test_runtime_schedule.ScheduleTests.test_0900_start_and_explicit_identity) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_2100_stop_retains_every_resource_and_never_forces_kill (test_runtime_schedule.ScheduleTests.test_2100_stop_retains_every_resource_and_never_forces_kill) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_backup_completion_requires_no_process_and_known_substate (test_runtime_schedule.ScheduleTests.test_backup_completion_requires_no_process_and_known_substate) ... ok
+test_backup_never_finishes_no_runtime_operation (test_runtime_schedule.ScheduleTests.test_backup_never_finishes_no_runtime_operation) ... ok
+test_backup_script_holds_same_lock_until_dump_finishes (test_runtime_schedule.ScheduleTests.test_backup_script_holds_same_lock_until_dump_finishes) ... ok
+test_backup_states_fail_closed (test_runtime_schedule.ScheduleTests.test_backup_states_fail_closed) ... ok
+test_backup_still_running_waits_and_rechecks_before_shutdown (test_runtime_schedule.ScheduleTests.test_backup_still_running_waits_and_rechecks_before_shutdown) ... ok
+test_boot_and_missed_events_use_current_time (test_runtime_schedule.ScheduleTests.test_boot_and_missed_events_use_current_time) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_completed_failed_backup_remains_failed_but_allows_operation (test_runtime_schedule.ScheduleTests.test_completed_failed_backup_remains_failed_but_allows_operation) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_concurrent_invocation_cannot_enter_runtime_operation (test_runtime_schedule.ScheduleTests.test_concurrent_invocation_cannot_enter_runtime_operation) ... ok
+test_cutoff_during_identity_recheck_does_not_start (test_runtime_schedule.ScheduleTests.test_cutoff_during_identity_recheck_does_not_start) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_detected_external_recreation_prevents_start (test_runtime_schedule.ScheduleTests.test_detected_external_recreation_prevents_start) ... ok
+test_docker_unavailable_leaves_stack_untouched (test_runtime_schedule.ScheduleTests.test_docker_unavailable_leaves_stack_untouched) ... ok
+test_failed_start_stops_partial_stack_and_reports_redacted_error (test_runtime_schedule.ScheduleTests.test_failed_start_stops_partial_stack_and_reports_redacted_error) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_failed_stop_does_not_stop_database_or_escalate (test_runtime_schedule.ScheduleTests.test_failed_stop_does_not_stop_database_or_escalate) ... Graceful stop: waiting without forced kill
+ok
+test_identity_ambiguity_never_changes_containers (test_runtime_schedule.ScheduleTests.test_identity_ambiguity_never_changes_containers) ... ok
+test_late_backup_after_shutdown_fails_without_partial_artifact (test_runtime_schedule.ScheduleTests.test_late_backup_after_shutdown_fails_without_partial_artifact) ... ok
+test_main_failure_is_journal_ready_and_redacted (test_runtime_schedule.ScheduleTests.test_main_failure_is_journal_ready_and_redacted) ... ok
+test_repeated_reconciliation_is_nondestructive (test_runtime_schedule.ScheduleTests.test_repeated_reconciliation_is_nondestructive) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_restart_policy_failure_prevents_start (test_runtime_schedule.ScheduleTests.test_restart_policy_failure_prevents_start) ... ok
+test_start_crossing_cutoff_stops_again (test_runtime_schedule.ScheduleTests.test_start_crossing_cutoff_stops_again) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_subprocess_environment_excludes_credentials_and_smoke_overrides (test_runtime_schedule.ScheduleTests.test_subprocess_environment_excludes_credentials_and_smoke_overrides) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_timeout_redacted (test_runtime_schedule.ScheduleTests.test_timeout_redacted) ... ok
+test_timer_and_service_safety_settings (test_runtime_schedule.ScheduleTests.test_timer_and_service_safety_settings) ... ok
+test_timezone_boundaries_independent_of_host_timezone (test_runtime_schedule.ScheduleTests.test_timezone_boundaries_independent_of_host_timezone) ... ok
+test_wait_releases_lock_for_pending_backup_and_reconcile_holds_it (test_runtime_schedule.ScheduleTests.test_wait_releases_lock_for_pending_backup_and_reconcile_holds_it) ... ok
+test_conflicting_ack_keeps_installed_snapshot_and_pending_state (test_runtime_schedule_config.ScheduleConfigTests.test_conflicting_ack_keeps_installed_snapshot_and_pending_state) ... ok
+test_corrupt_snapshot_refuses_main_before_container_reconciliation (test_runtime_schedule_config.ScheduleConfigTests.test_corrupt_snapshot_refuses_main_before_container_reconciliation) ... ok
+test_failed_backup_with_running_control_process_is_unknown (test_runtime_schedule_config.ScheduleConfigTests.test_failed_backup_with_running_control_process_is_unknown) ... ok
+test_missing_snapshot_refuses_main_before_container_reconciliation (test_runtime_schedule_config.ScheduleConfigTests.test_missing_snapshot_refuses_main_before_container_reconciliation) ... ok
+test_offline_startup_then_post_start_sync_reconciles_new_saved_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_offline_startup_then_post_start_sync_reconciles_new_saved_schedule) ... ok
+test_schedule_times_are_strict_and_preserve_backup_window (test_runtime_schedule_config.ScheduleConfigTests.test_schedule_times_are_strict_and_preserve_backup_window) ... ok
+test_snapshot_fallback_warns_when_stale (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_fallback_warns_when_stale) ... ok
+test_snapshot_install_failure_does_not_acknowledge_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_install_failure_does_not_acknowledge_schedule) ... ok
+test_snapshot_is_atomic_private_and_round_trips_validated_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_is_atomic_private_and_round_trips_validated_schedule) ... ok
+test_snapshot_schema_and_file_permissions_fail_closed (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_schema_and_file_permissions_fail_closed) ... ok
+test_state_directory_requires_owned_private_directory (test_runtime_schedule_config.ScheduleConfigTests.test_state_directory_requires_owned_private_directory) ... ok
+test_sync_rejects_nonprivate_token_and_oversized_response (test_runtime_schedule_config.ScheduleConfigTests.test_sync_rejects_nonprivate_token_and_oversized_response) ... ok
+test_sync_uses_fixed_local_authenticated_bounded_no_proxy_request (test_runtime_schedule_config.ScheduleConfigTests.test_sync_uses_fixed_local_authenticated_bounded_no_proxy_request) ... ok
+
+----------------------------------------------------------------------
+Ran 77 tests in 1.723s
+
+OK
+exit=0
+
+$ pytest -q (isolated PostgreSQL)
+........................................................................ [ 23%]
+........................................................................ [ 47%]
+........................................................................ [ 71%]
+........................................................................ [ 94%]
+................                                                         [100%]
+=============================== warnings summary ===============================
+tests/test_adapters.py::test_rss_fixture_is_fetched_and_parsed_with_deadline
+  /tmp/hoplite/workspace/repo-repo_1455581295/.venv/lib/python3.12/site-packages/feedparser/util.py:95: DeprecationWarning: To avoid breaking existing software while fixing issue 310, a temporary mapping has been created from `updated_parsed` to `published_parsed` if `updated_parsed` doesn't exist. This fallback will be removed in a future version of feedparser.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+304 passed, 1 warning in 91.32s (0:01:31)
+exit=0
+
+$ ruff check app tests scripts (API)
+All checks passed!
+exit=0
+
+$ mypy app/api/runtime_schedule.py app/db/models/runtime_schedule.py
+Success: no issues found in 2 source files
+exit=0
+
+$ ruff check scripts runtime/tests
+All checks passed!
+exit=0
+
+$ python -m compileall -q scripts/runtime_schedule.py scripts/tests
+(no output)
+exit=0
+
+$ bash -n scripts/backup.sh scripts/restore.sh
+(no output)
+exit=0
+
+$ systemd-analyze verify deploy/systemd/discmon-runtime.service deploy/systemd/discmon-runtime.timer
+(no output)
+exit=0
+
+$ systemd-analyze calendar --base-time=2026-11-13 03:29:59 UTC --iterations=2 *-*-* *:*:00 Asia/Kolkata
+Normalized form: *-*-* *:*:00 Asia/Kolkata
+    Next elapse: Fri 2026-11-13 03:30:00 UTC
+       From now: 16h ago
+   Iteration #2: Fri 2026-11-13 03:31:00 UTC
+       From now: 16h ago
+exit=0
+
+$ git diff --check
+(no output)
+exit=0
+
+Final supplemental verification after safety review and UI refinements
+Safety review: verified ControlPID is requested and must be zero; added query assertion.
+Disabled owner auth now fails closed in staging as well as production.
+Settings validation hides credential input values in configuration errors.
+
+$ python -m unittest discover -s scripts/tests -v (final; adds custom minute cutoff/interface checks)
+test_actual_occupied_local_port_probe (test_compose_preflight.PreflightTests.test_actual_occupied_local_port_probe) ... ok
+test_compose_unavailable_invalid_config_and_secret_diagnostics (test_compose_preflight.PreflightTests.test_compose_unavailable_invalid_config_and_secret_diagnostics) ... ok
+test_daemon_unavailable (test_compose_preflight.PreflightTests.test_daemon_unavailable) ... ok
+test_docker_nat_published_ports_rejected_without_socket_listener (test_compose_preflight.PreflightTests.test_docker_nat_published_ports_rejected_without_socket_listener) ... ok
+test_existing_resources_by_name_and_label_rejected (test_compose_preflight.PreflightTests.test_existing_resources_by_name_and_label_rejected) ... ok
+test_external_or_ambiguous_db_routing (test_compose_preflight.PreflightTests.test_external_or_ambiguous_db_routing) ... ok
+test_host_success_read_only_inventory_and_bind_probes (test_compose_preflight.PreflightTests.test_host_success_read_only_inventory_and_bind_probes) ... ok
+test_inherited_routing_rejected_without_echo (test_compose_preflight.PreflightTests.test_inherited_routing_rejected_without_echo) ... ok
+test_invalid_json (test_compose_preflight.PreflightTests.test_invalid_json) ... ok
+test_missing_docker (test_compose_preflight.PreflightTests.test_missing_docker) ... ok
+test_missing_required_compose_capability (test_compose_preflight.PreflightTests.test_missing_required_compose_capability) ... ok
+test_occupied_port (test_compose_preflight.PreflightTests.test_occupied_port) ... ok
+test_project_identities_and_unknown_secret_input (test_compose_preflight.PreflightTests.test_project_identities_and_unknown_secret_input) ... ok
+test_real_compose_in_fresh_copy_ignores_dotenv_and_shell_secrets (test_compose_preflight.PreflightTests.test_real_compose_in_fresh_copy_ignores_dotenv_and_shell_secrets) ... ok
+test_real_invalid_configuration_suppresses_diagnostics (test_compose_preflight.PreflightTests.test_real_invalid_configuration_suppresses_diagnostics) ... ok
+test_static_success_only_capabilities_and_two_renders (test_compose_preflight.PreflightTests.test_static_success_only_capabilities_and_two_renders) ... ok
+test_supported_compose_v5_uses_identical_safety_checks (test_compose_preflight.PreflightTests.test_supported_compose_v5_uses_identical_safety_checks) ... ok
+test_unsafe_resource_definitions (test_compose_preflight.PreflightTests.test_unsafe_resource_definitions) ... ok
+test_unsupported_compose_version (test_compose_preflight.PreflightTests.test_unsupported_compose_version) ... ok
+test_compose_failure_diagnostics_are_suppressed (test_compose_smoke.ComposeSmokeTests.test_compose_failure_diagnostics_are_suppressed) ... ok
+test_enabled_worker_scheduler_changedetection_and_profiles_are_refused (test_compose_smoke.ComposeSmokeTests.test_enabled_worker_scheduler_changedetection_and_profiles_are_refused) ... ok
+test_inherited_compose_and_docker_routing_environment_is_refused (test_compose_smoke.ComposeSmokeTests.test_inherited_compose_and_docker_routing_environment_is_refused) ... ok
+test_invocation_uses_only_sanitized_static_compose_commands (test_compose_smoke.ComposeSmokeTests.test_invocation_uses_only_sanitized_static_compose_commands) ... ok
+test_malformed_json_and_resolved_config_are_suppressed (test_compose_smoke.ComposeSmokeTests.test_malformed_json_and_resolved_config_are_suppressed) ... ok
+test_missing_docker_cli_is_refused_without_invoking_compose (test_compose_smoke.ComposeSmokeTests.test_missing_docker_cli_is_refused_without_invoking_compose) ... ok
+test_postgres_image_and_healthcheck_must_be_exact (test_compose_smoke.ComposeSmokeTests.test_postgres_image_and_healthcheck_must_be_exact) ... ok
+test_postgres_ports_and_inherited_production_or_public_binds_are_refused (test_compose_smoke.ComposeSmokeTests.test_postgres_ports_and_inherited_production_or_public_binds_are_refused) ... ok
+test_protected_project_names_and_unsafe_ports_are_refused (test_compose_smoke.ComposeSmokeTests.test_protected_project_names_and_unsafe_ports_are_refused) ... ok
+test_real_compose_default_and_custom_ports_ignore_dotenv_and_private_inputs (test_compose_smoke.ComposeSmokeTests.test_real_compose_default_and_custom_ports_ignore_dotenv_and_private_inputs) ... ok
+test_real_compose_rejects_inherited_ports_secret_mount_and_malformed_yaml (test_compose_smoke.ComposeSmokeTests.test_real_compose_rejects_inherited_ports_secret_mount_and_malformed_yaml) ... ok
+test_remote_canonical_and_mismatched_database_urls (test_compose_smoke.ComposeSmokeTests.test_remote_canonical_and_mismatched_database_urls) ... ok
+test_reused_external_and_custom_volumes_or_networks_are_refused (test_compose_smoke.ComposeSmokeTests.test_reused_external_and_custom_volumes_or_networks_are_refused) ... ok
+test_secret_bind_and_extra_mounts_are_refused (test_compose_smoke.ComposeSmokeTests.test_secret_bind_and_extra_mounts_are_refused) ... ok
+test_sentinel_environment_and_credentials_are_not_echoed (test_compose_smoke.ComposeSmokeTests.test_sentinel_environment_and_credentials_are_not_echoed) ... ok
+test_service_network_routes_and_per_network_attributes_are_exact (test_compose_smoke.ComposeSmokeTests.test_service_network_routes_and_per_network_attributes_are_exact) ... ok
+test_unknown_and_duplicate_port_options_are_refused_before_compose (test_compose_smoke.ComposeSmokeTests.test_unknown_and_duplicate_port_options_are_refused_before_compose) ... ok
+test_unsupported_compose_versions_and_capabilities_refuse_before_config (test_compose_smoke.ComposeSmokeTests.test_unsupported_compose_versions_and_capabilities_refuse_before_config) ... ok
+test_valid_resolved_model_is_isolated_and_canonical (test_compose_smoke.ComposeSmokeTests.test_valid_resolved_model_is_isolated_and_canonical) ... ok
+test_0900_start_and_explicit_identity (test_runtime_schedule.ScheduleTests.test_0900_start_and_explicit_identity) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_2100_stop_retains_every_resource_and_never_forces_kill (test_runtime_schedule.ScheduleTests.test_2100_stop_retains_every_resource_and_never_forces_kill) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_backup_completion_requires_no_process_and_known_substate (test_runtime_schedule.ScheduleTests.test_backup_completion_requires_no_process_and_known_substate) ... ok
+test_backup_never_finishes_no_runtime_operation (test_runtime_schedule.ScheduleTests.test_backup_never_finishes_no_runtime_operation) ... ok
+test_backup_script_holds_same_lock_until_dump_finishes (test_runtime_schedule.ScheduleTests.test_backup_script_holds_same_lock_until_dump_finishes) ... ok
+test_backup_states_fail_closed (test_runtime_schedule.ScheduleTests.test_backup_states_fail_closed) ... ok
+test_backup_still_running_waits_and_rechecks_before_shutdown (test_runtime_schedule.ScheduleTests.test_backup_still_running_waits_and_rechecks_before_shutdown) ... ok
+test_boot_and_missed_events_use_current_time (test_runtime_schedule.ScheduleTests.test_boot_and_missed_events_use_current_time) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_completed_failed_backup_remains_failed_but_allows_operation (test_runtime_schedule.ScheduleTests.test_completed_failed_backup_remains_failed_but_allows_operation) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_concurrent_invocation_cannot_enter_runtime_operation (test_runtime_schedule.ScheduleTests.test_concurrent_invocation_cannot_enter_runtime_operation) ... ok
+test_cutoff_during_identity_recheck_does_not_start (test_runtime_schedule.ScheduleTests.test_cutoff_during_identity_recheck_does_not_start) ... Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_detected_external_recreation_prevents_start (test_runtime_schedule.ScheduleTests.test_detected_external_recreation_prevents_start) ... ok
+test_docker_unavailable_leaves_stack_untouched (test_runtime_schedule.ScheduleTests.test_docker_unavailable_leaves_stack_untouched) ... ok
+test_failed_start_stops_partial_stack_and_reports_redacted_error (test_runtime_schedule.ScheduleTests.test_failed_start_stops_partial_stack_and_reports_redacted_error) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_failed_stop_does_not_stop_database_or_escalate (test_runtime_schedule.ScheduleTests.test_failed_stop_does_not_stop_database_or_escalate) ... Graceful stop: waiting without forced kill
+ok
+test_identity_ambiguity_never_changes_containers (test_runtime_schedule.ScheduleTests.test_identity_ambiguity_never_changes_containers) ... ok
+test_late_backup_after_shutdown_fails_without_partial_artifact (test_runtime_schedule.ScheduleTests.test_late_backup_after_shutdown_fails_without_partial_artifact) ... ok
+test_main_failure_is_journal_ready_and_redacted (test_runtime_schedule.ScheduleTests.test_main_failure_is_journal_ready_and_redacted) ... ok
+test_repeated_reconciliation_is_nondestructive (test_runtime_schedule.ScheduleTests.test_repeated_reconciliation_is_nondestructive) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_restart_policy_failure_prevents_start (test_runtime_schedule.ScheduleTests.test_restart_policy_failure_prevents_start) ... ok
+test_start_crossing_cutoff_stops_again (test_runtime_schedule.ScheduleTests.test_start_crossing_cutoff_stops_again) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+Graceful stop: waiting without forced kill
+DiscMon stopped; containers and volumes retained
+ok
+test_subprocess_environment_excludes_credentials_and_smoke_overrides (test_runtime_schedule.ScheduleTests.test_subprocess_environment_excludes_credentials_and_smoke_overrides) ... Within 09:00–21:00 Asia/Kolkata: start existing DiscMon containers
+DiscMon started; automatic restart disabled
+ok
+test_timeout_redacted (test_runtime_schedule.ScheduleTests.test_timeout_redacted) ... ok
+test_timer_and_service_safety_settings (test_runtime_schedule.ScheduleTests.test_timer_and_service_safety_settings) ... ok
+test_timezone_boundaries_independent_of_host_timezone (test_runtime_schedule.ScheduleTests.test_timezone_boundaries_independent_of_host_timezone) ... ok
+test_wait_releases_lock_for_pending_backup_and_reconcile_holds_it (test_runtime_schedule.ScheduleTests.test_wait_releases_lock_for_pending_backup_and_reconcile_holds_it) ... ok
+test_compose_exposes_no_host_runtime_control_interfaces (test_runtime_schedule_config.ScheduleConfigTests.test_compose_exposes_no_host_runtime_control_interfaces) ... ok
+test_conflicting_ack_keeps_installed_snapshot_and_pending_state (test_runtime_schedule_config.ScheduleConfigTests.test_conflicting_ack_keeps_installed_snapshot_and_pending_state) ... ok
+test_corrupt_snapshot_refuses_main_before_container_reconciliation (test_runtime_schedule_config.ScheduleConfigTests.test_corrupt_snapshot_refuses_main_before_container_reconciliation) ... ok
+test_custom_minute_boundaries_use_saved_window_on_boot_or_resume (test_runtime_schedule_config.ScheduleConfigTests.test_custom_minute_boundaries_use_saved_window_on_boot_or_resume) ... ok
+test_failed_backup_with_running_control_process_is_unknown (test_runtime_schedule_config.ScheduleConfigTests.test_failed_backup_with_running_control_process_is_unknown) ... ok
+test_missing_snapshot_refuses_main_before_container_reconciliation (test_runtime_schedule_config.ScheduleConfigTests.test_missing_snapshot_refuses_main_before_container_reconciliation) ... ok
+test_offline_startup_then_post_start_sync_reconciles_new_saved_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_offline_startup_then_post_start_sync_reconciles_new_saved_schedule) ... ok
+test_schedule_times_are_strict_and_preserve_backup_window (test_runtime_schedule_config.ScheduleConfigTests.test_schedule_times_are_strict_and_preserve_backup_window) ... ok
+test_snapshot_fallback_warns_when_stale (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_fallback_warns_when_stale) ... ok
+test_snapshot_install_failure_does_not_acknowledge_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_install_failure_does_not_acknowledge_schedule) ... ok
+test_snapshot_is_atomic_private_and_round_trips_validated_schedule (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_is_atomic_private_and_round_trips_validated_schedule) ... ok
+test_snapshot_schema_and_file_permissions_fail_closed (test_runtime_schedule_config.ScheduleConfigTests.test_snapshot_schema_and_file_permissions_fail_closed) ... ok
+test_state_directory_requires_owned_private_directory (test_runtime_schedule_config.ScheduleConfigTests.test_state_directory_requires_owned_private_directory) ... ok
+test_sync_rejects_nonprivate_token_and_oversized_response (test_runtime_schedule_config.ScheduleConfigTests.test_sync_rejects_nonprivate_token_and_oversized_response) ... ok
+test_sync_uses_fixed_local_authenticated_bounded_no_proxy_request (test_runtime_schedule_config.ScheduleConfigTests.test_sync_uses_fixed_local_authenticated_bounded_no_proxy_request) ... ok
+
+----------------------------------------------------------------------
+Ran 79 tests in 1.666s
+
+OK
+
+exit=0
+
+$ npm run lint; npm run typecheck; npm run build
+$ npm run lint
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> discmon-web@0.1.0 lint
+> eslint .
+
+exit=0
+$ npm run typecheck
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> discmon-web@0.1.0 typecheck
+> tsc --noEmit
+
+exit=0
+$ npm run build
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> discmon-web@0.1.0 build
+> next build
+
+▲ Next.js 16.4.3 (Turbopack)
+✓ Running next.config.ts took 26ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 146ms
+  Running TypeScript ...
+  Finished TypeScript in 1354ms ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/2) ...
+✓ Generating static pages using 3 workers (2/2) in 82ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /deadlines
+├ ƒ /digests
+├ ƒ /digests/[id]
+├ ƒ /discover
+├ ƒ /downloads/brief.md
+├ ƒ /downloads/deadlines.ics
+├ ƒ /downloads/opportunities.csv
+├ ƒ /health
+├ ƒ /opportunities
+├ ƒ /opportunities/[id]
+├ ƒ /settings
+├ ƒ /sources
+├ ƒ /sources/[id]
+└ ƒ /watchlist
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+exit=0
+
+exit=0
+
+$ npm run build (final saved revision/error copy refinement)
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> discmon-web@0.1.0 build
+> next build
+
+▲ Next.js 16.4.3 (Turbopack)
+✓ Running next.config.ts took 29ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 150ms
+  Running TypeScript ...
+  Finished TypeScript in 1388ms ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/2) ...
+✓ Generating static pages using 3 workers (2/2) in 92ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /deadlines
+├ ƒ /digests
+├ ƒ /digests/[id]
+├ ƒ /discover
+├ ƒ /downloads/brief.md
+├ ƒ /downloads/deadlines.ics
+├ ƒ /downloads/opportunities.csv
+├ ƒ /health
+├ ƒ /opportunities
+├ ƒ /opportunities/[id]
+├ ƒ /settings
+├ ƒ /sources
+├ ƒ /sources/[id]
+└ ƒ /watchlist
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+exit=0
+
+$ alembic upgrade head; downgrade d4a7c1e9f210; upgrade head (fresh discmon_migration_test)
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> b76e2a98caca, initial schema
+INFO  [alembic.runtime.migration] Running upgrade b76e2a98caca -> d4a7c1e9f210, discovery promotion, webhook receipts and preparation fields
+INFO  [alembic.runtime.migration] Running upgrade d4a7c1e9f210 -> e5b8f19c2a70, persist the singleton runtime schedule and host application status
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade e5b8f19c2a70 -> d4a7c1e9f210, persist the singleton runtime schedule and host application status
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade d4a7c1e9f210 -> e5b8f19c2a70, persist the singleton runtime schedule and host application status
+
+exit=0
+
+$ PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npx playwright test tests/e2e/runtime-schedule.spec.ts (final production build)
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+Running 2 tests using 1 worker
+
+  ✓  1 [desktop-1440] › tests/e2e/runtime-schedule.spec.ts:15:5 › runtime schedule saves, reloads, validates backup limits, and restores the original (924ms)
+  ✓  2 [mobile-360] › tests/e2e/runtime-schedule.spec.ts:15:5 › runtime schedule saves, reloads, validates backup limits, and restores the original (626ms)
+
+  2 passed (2.4s)
+
+exit=0
+
+$ Real isolated API/ScheduleStore ACK + browser applied/error/missing-state/pending assertions
+Browser status assertion PASS: Applied by host
+Browser status assertion PASS: The host could not save its protected schedule snapshot.
+Browser status assertion PASS: Runtime schedule is not initialized
+Browser API load failure leaves profile preferences usable: PASS
+Browser status assertion PASS: Waiting for host confirmation
+No Docker/systemd runtime operation executed; all DB writes isolated to discmon_migration_test.
+
+exit=0
+
+Final lint/typecheck refinement run: npm run lint && npm run typecheck && npm run build; exit=0.
+Final host Ruff/compileall/diff-check: all exit=0.
+Migration row verified: id=1 revision=1 09:00:00–21:00:00 Asia/Kolkata applied_revision=NULL.
+
+Browser/environment recovery notes:
+- Initial Playwright launch lacked its installed Chromium revision (exit 1); npx playwright install chromium exited 0.
+- Development-server browser assertions found native time values changed without React state updates (2 failures, exit 1).
+  Dev/HMR hydration was unavailable; no validation assertion was weakened and no arbitrary sleep was added.
+  Managed Preview was stopped and restarted against the actual production build; both viewport tests then passed.
+- A manual browser verification overlapping the mutation E2E encountered the expected revision-conflict 409.
+  Re-ran that manual flow sequentially after E2E: all status/error assertions passed (exit 0).
+- Fresh dark screenshots were inspected at 1440x1000 and 360x800; no horizontal overflow.
+  Screenshot artifacts remain private workspace evidence, with only synthetic test profile/schedule data.
+- Preview final app is production web + API against discmon_migration_test; no worker/scheduler/collector runs.
+- No real systemd job or Docker start/stop was executed. Boot/resume/backup states are mock-based.
+- PostgreSQL16 was available in isolation; production PostgreSQL18/Docker/Ubuntu adoption remains owner-side verification.
+
+Final auth edge-case check: compare UTF-8 bytes so non-ASCII malformed bearer tokens
+return 401 rather than a compare_digest TypeError. Added to existing auth test.
+$ pytest -q tests/test_runtime_schedule_api.py; ruff check app tests scripts; focused mypy
+.......                                                                  [100%]
+7 passed in 0.69s
+All checks passed!
+Success: no issues found in 2 source files
+exit=0
+A one-character Ruff line overflow introduced by this wrapping was corrected before the passing rerun.

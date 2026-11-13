@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-11-13 — Task 17B editable runtime schedule (review-only, not deployed)
+
+- Recovered exact Task 17 `bdc653f`, whose parent is accepted checkpoint `8c54d70`;
+  isolated branch `task17b/editable-runtime-schedule`. Original workspace `2c31234`
+  was an older ancestor; no accepted work was discarded. Remote handoff still
+  resolves to `8c54d70`.
+- Add Settings time editor, live duration, saved/host-installed revisions, explicit
+  pending/applied/stale/error states and API failure handling, separate from quiet
+  hours. Persist a constrained singleton through an additive migration. Serialize
+  saves/ACKs with revision conflicts and a PostgreSQL row lock.
+- Extend the existing controller with dedicated-token loopback pulls, durable
+  private snapshots and offline startup, followed by post-start synchronization.
+  No privileged interface mounts, shell interpolation or competing controller.
+- Keep 20:30 backup units unchanged. Reject starts after 20:00 and shutdowns
+  before 21:00 until an approved backup migration; do not claim unsupported
+  windows applied. Completed failed backup warns without blocking forever;
+  active/unknown backup, including live control processes, remains conservative.
+- Final verification: **304 backend tests**, **79 script tests**, **2 browser E2E
+  tests** at 1440px/360px pass. API/host Ruff, focused mypy, frontend lint and
+  typecheck, production build, Python compilation, Bash syntax, systemd unit
+  validation, calendar validation and diff check all exit **0**. Fresh isolated
+  migration upgrade/downgrade/upgrade passes. Real local host snapshot/ACK and
+  browser status/error assertions pass. One pre-existing feedparser warning.
+- Production-build browser verification resolved the dev/HMR hydration failure;
+  no assertions were relaxed. Exact outcomes and recovered failures are in
+  `docs/evidence/task17b-runtime-validation.txt`. Architecture, files, limits and
+  review notes: `docs/task17b-review.md`; owner installation/rollback and safe
+  earlier-shutdown transition policy: `docs/runtime-schedule.md`.
+- Live deployment, database, backup units and data untouched. No ingestion,
+  Docker start/stop, systemd installation/enablement, merge or deployment. Actual
+  laptop boot/resume and production adoption remain unverified and approval-gated.
+
+## 2026-11-13 — Task 17 Ubuntu daily runtime (not deployed)
+
+- Baseline `8c54d70`, branch `handoff/stabilize-idfc-audit-20261112`.
+  The prior checkpoint-to-baseline diff is exactly 67 files / 11,290 additions /
+  306 deletions; none was introduced or reverted by Task 17.
+- Add a bounded current-time Kolkata reconciler and one service/timer pair for
+  the existing five-container Compose stack. Verify project/file/volume identity,
+  disable container auto-restart, serialize with backups, and stop gracefully
+  without a forced-kill timeout. Never create/remove containers or volumes.
+- Add only a shared lock to the backup script; existing live backup units remain
+  untouched. Failed/unknown/busy backup status fails closed. Missed backups are
+  not replayed and do not cause an overnight restart. Safety can delay shutdown.
+- Offline validation: `python3 -m unittest discover -s scripts/tests -p
+  test_runtime_schedule.py -v`: **25 tests passed**; `python3 -m unittest discover
+  -s scripts/tests`: **63 tests passed**. Ruff, Python compilation, Bash syntax,
+  systemd unit verification, timezone/calendar checks and diff check all exit
+  **0**. Exact outputs: `docs/evidence/task17-runtime-validation.txt`.
+- Installation/verification/rollback and residual limits: `docs/runtime-schedule.md`.
+  No live Docker/systemctl operation, database write/migration, ingestion, service
+  installation/enablement, push, merge or deployment. Application/Compose files
+  unchanged; laptop behavior remains unverified until owner-approved adoption.
+
 ## 2026-11-13 — Task 16 offline Telegram consent and delivery regression
 
 - Reuse existing alert/queue/worker path; recheck owner opt-in at dispatch and

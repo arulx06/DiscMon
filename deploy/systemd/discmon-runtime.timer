@@ -1,0 +1,13 @@
+[Unit]
+Description=DiscMon saved Kolkata runtime reconciliation
+
+[Timer]
+OnCalendar=*-*-* *:*:00 Asia/Kolkata
+OnBootSec=30s
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=true
+Unit=discmon-runtime.service
+
+[Install]
+WantedBy=timers.target
