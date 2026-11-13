@@ -1,5 +1,6 @@
 import { Notice } from "@/components/Notice";
-import { updateProfileAction } from "@/lib/actions";
+import { RuntimeScheduleSection } from "@/components/RuntimeScheduleSection";
+import { loadRuntimeScheduleAction, updateProfileAction } from "@/lib/actions";
 import { api } from "@/lib/api";
 import { label } from "@/lib/format";
 
@@ -18,6 +19,7 @@ export default async function SettingsPage({
 }) {
   const query = await searchParams;
   const profile = await api.profile();
+  const runtimeSchedule = await loadRuntimeScheduleAction();
 
   return (
     <>
@@ -160,6 +162,8 @@ export default async function SettingsPage({
           gates.
         </p>
       </section>
+
+      <RuntimeScheduleSection initialResult={runtimeSchedule} />
     </>
   );
 }
