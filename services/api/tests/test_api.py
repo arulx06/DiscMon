@@ -208,3 +208,27 @@ async def test_outreachy_application_url_stays_unknown_through_ingestion_and_api
     assert repeated.skipped == 1 and repeated.created == repeated.updated == 0
     await session.refresh(opportunity)
     assert opportunity.application_url is None
+
+
+@pytest.mark.integration
+async def test_demo_seed_supplies_both_application_link_states(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    from scripts.seed_sources import seed_demo
+
+    assert await seed_demo(session) == 5
+    await session.commit()
+    assert await seed_demo(session) == 0
+    await session.commit()
+    for slug, expected_url in [
+        ("maintainer-residency", None),
+        ("senior-backend", "https://example.org/discmon-demo/senior-backend/apply"),
+    ]:
+        opportunity = await session.scalar(
+            select(Opportunity).where(Opportunity.provider_key == f"demo:{slug}")
+        )
+        assert opportunity is not None and opportunity.is_fixture is True
+        detail = await client.get(f"/v1/opportunities/{opportunity.id}")
+        assert detail.status_code == 200
+        assert detail.json()["application_url"] == expected_url
+        assert detail.json()["official_url"] == f"https://example.org/discmon-demo/{slug}"

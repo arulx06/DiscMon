@@ -36,16 +36,19 @@ test("review flow uses labelled demo fixtures and persists the decision", async 
   await expect(page.getByRole("link", { name: DEMO_TITLE })).toBeVisible();
 });
 
-test("static Outreachy overview keeps its official source without an application link", async ({
+test("demo overview keeps its official source without an application link", async ({
   page,
 }) => {
-  await page.goto("/opportunities?search=Outreachy&include_fixtures=1");
-  const opportunity = page.getByRole("link", { name: "Outreachy", exact: true });
+  await page.goto("/opportunities?include_fixtures=1");
+  const title = "[Demo] Open Source Maintainer Residency";
+  const opportunity = page.getByRole("link", { name: title, exact: true });
   await expect(opportunity).toBeVisible();
   await opportunity.click();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByText("Demo fixture", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Official source" })).toHaveAttribute(
     "href",
-    "https://www.mediawiki.org/wiki/Outreachy",
+    "https://example.org/discmon-demo/maintainer-residency",
   );
   await expect(page.getByRole("link", { name: "Application page" })).toHaveCount(0);
 });

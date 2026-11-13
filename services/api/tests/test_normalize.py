@@ -128,6 +128,9 @@ def test_compensation_supports_lpa_without_currency_token() -> None:
 @pytest.mark.parametrize(
     ("title", "text", "expected"),
     [
+        ("Community", "A fellowship programme for engineers", OpportunityType.fellowship),
+        ("Community", "A technical residency programme", OpportunityType.residency),
+        ("Community", "An open-source mentorship programme", OpportunityType.mentorship),
         ("OSS Mentorship", "A full-time programme with mentors.", OpportunityType.mentorship),
         ("AI Fellowship", "Programme with mentor resources.", OpportunityType.fellowship),
         ("AI Residency", "Internship and fellowship resources.", OpportunityType.residency),
