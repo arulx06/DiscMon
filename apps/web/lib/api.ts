@@ -13,6 +13,7 @@ import type {
   SourceHealth,
   SourceRunList,
   SourceSummary,
+  RuntimeSchedule,
   SystemStatus,
   UserProfile,
   Watchlist,
@@ -60,9 +61,16 @@ async function request(path: string, init: RequestInit): Promise<Response> {
     let code = "http_error";
     let message = `API request failed with ${response.status}`;
     try {
-      const payload = (await response.json()) as { code?: string; message?: string };
+      const payload = (await response.json()) as {
+        code?: string;
+        message?: string;
+        detail?: string | Array<{ msg?: string }>;
+      };
       code = payload.code ?? code;
-      message = payload.message ?? message;
+      const detail = Array.isArray(payload.detail)
+        ? payload.detail.map((item) => item.msg).filter(Boolean).join("; ")
+        : payload.detail;
+      message = payload.message ?? detail ?? message;
     } catch {
       // Keep the status-based fallback.
     }
@@ -81,7 +89,7 @@ export async function apiGet<T>(
 
 export async function apiSend<T>(
   path: string,
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
   body?: unknown,
 ): Promise<T> {
   const response = await request(buildUrl(path), {
@@ -120,4 +128,5 @@ export const api = {
   integrationStatus: () => apiGet<IntegrationStatus>("/integrations/status"),
   sourceHealth: () => apiGet<SourceHealth>("/health/sources"),
   systemStatus: () => apiGet<SystemStatus>("/system/status"),
+  runtimeSchedule: () => apiGet<RuntimeSchedule>("/runtime-schedule"),
 };
