@@ -101,9 +101,10 @@ There are no bind mounts, workers, scheduler or optional integrations.
 egress isolation.** Production preflight and production Compose are unchanged.
 
 Static validation proves the intended model, **not** resource freshness, free
-ports, effective runtime networking or app health. M0 remains **PARTIAL**.
-See [deployment](docs/deployment.md#isolated-smoke-configuration-task-3)
-for the model, safeguards and separately authorized future drill.
+ports, effective runtime networking or app health. The separate isolated
+clean-volume drill was accepted for M0 on 2026-11-13; that acceptance is not a
+production deployment or proof of complete outbound isolation. See
+[deployment](docs/deployment.md#isolated-m0-acceptance) for evidence and limits.
 
 ## Quick start (Docker Compose deployment)
 
@@ -244,12 +245,15 @@ docker compose exec api python /app/scripts/seed_sources.py --demo
 cd apps/web; npx playwright install chromium; npm run test:e2e
 ```
 
-Fresh local Docker Compose acceptance remains incomplete; this test guard does
-not establish full M0 acceptance.
+This local deployment procedure was not the isolated M0 acceptance drill and
+does not establish production deployment acceptance.
 
 Acceptance evidence is recorded in `docs/acceptance/acceptance-report.md`.
-Current milestone status, known gaps and exact commands are in
-`docs/PROGRESS.md`.
+M0 is **ACCEPTED** based on the isolated drill; M5 remains **PARTIAL**. The
+fixture-backed connected discovery/approval/promotion/ingestion/Sheets-failure
+regression and full backend suite passed locally, with Ruff and mypy clean; this
+is not full M5 or live Sheets acceptance, and no CI result is claimed. See
+`docs/PROGRESS.md` for commands and isolated test database details.
 
 ## Honest capability boundary
 

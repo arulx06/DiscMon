@@ -1,4 +1,19 @@
-﻿# Operations runbook
+# Operations runbook
+
+## Current acceptance status (2026-11-13)
+
+M0 is **ACCEPTED** from Retry 5's independent review of the isolated cloud
+drill at base `2f510c1d82532e1b87acec9082f2c56e073ec07e` (PR #4 merged): 38 Compose tests
+passed; fresh isolated PostgreSQL 18.7, API and web started; actual database
+identity was verified before one Alembic upgrade to `d4a7c1e9f210`; all 19
+tables were present with no seeded application records; API live/ready and the
+`Radar overview` dashboard returned HTTP 200; ownership-safe cleanup succeeded;
+Git was unchanged and the final exit was 0. See [Retry 5 evidence](https://api.hoplite.sh/api/attachments/ceb6a69a074e494ca9c94ef85a6eb650?media=file)
+and [independent acceptance](https://api.hoplite.sh/api/attachments/340fa8f8f5e847c3bc51dd29e2fc73d7?media=file).
+This is not production deployment or proof of full outbound isolation. M5 is
+still **PARTIAL**. The local fixture-backed connected-flow tests and full
+backend suite passed; CI and live Sheets acceptance are not claimed. Commands
+and isolated test database details are recorded in `PROGRESS.md`.
 
 ## Compose preflight and isolated drill boundary
 
@@ -29,12 +44,12 @@ volume and network list queries plus local socket bind probes.
 The current host ports are fixed at `3000`, `8000`, `55432`, and `5000` with
 the changedetection profile, so a unique project name alone does not prevent
 port conflicts. Neither preflight mode authorizes deployment, migration,
-seeding or any other runtime mutation. M0 remains **PARTIAL**; preflight is not
-acceptance evidence.
+seeding or any other runtime mutation. Preflight itself is not acceptance
+evidence; the isolated M0 acceptance is recorded above.
 
-A clean-volume drill is future work and requires separate explicit
-authorization plus a pinned commit checked out fresh in a disposable worktree
-with no production `.env`, secrets or credentials available. Use a disposable
+The accepted clean-volume drill used a pinned commit checked out fresh in a
+disposable worktree with no production `.env`, secrets or credentials available.
+A future repeat still requires separate explicit authorization. Use a disposable
 project, private/ingress networks and volume and a test-only override that removes
 secrets mounts and routes PostgreSQL to isolated test-only database/user/credentials.
 Bind only API/web on confirmed nonconflicting localhost ports; PostgreSQL
@@ -109,11 +124,12 @@ The proposed procedure, not executed in Task 3, is:
    `docker compose down -v`. Verify baseline resources are unchanged and all
    owned runtime resources are gone; record any leftover images explicitly.
 
-No services, databases or volumes were accessed or changed in Task 3. A future
-race between inventory and resource creation remains possible: refuse conflicts
-rather than adopting resources. Static validation cannot prove freshness,
-resource ownership, port availability or runtime health. **M0 remains PARTIAL**
-until the separately authorized drill provides that evidence.
+Task 3 itself accessed or changed no services, databases or volumes; its
+static validation did not establish runtime acceptance. The later isolated M0
+drill is recorded above. For any future repeat, a race between inventory and
+resource creation remains possible: refuse conflicts rather than adopting
+resources. Static validation still cannot prove freshness, ownership, port
+availability or runtime health.
 
 ## Network correction boundary (static only)
 
@@ -124,7 +140,7 @@ not conclusive proof of an Engine defect. See the session's original Retry 1
 transcript and cleanup inventory; do not replace those logs with new test output.
 
 The revised design removes PostgreSQL host publication and separates ingress.
-No runtime acceptance follows from successful static rendering. Before a later,
+Static rendering alone does not establish runtime acceptance. Before a later,
 separately authorized drill, recheck both network identities and attachments:
 PostgreSQL on private only; API/web on private and ingress; no aliases, extra
 networks or external resources. Prove the actual API database target and PostgreSQL
