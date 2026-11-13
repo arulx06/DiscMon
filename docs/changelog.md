@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-13 — Task 6 real non-ATS programme validation
+
+- Live Wikimedia Outreachy discovery → API review/approval/promotion → test-only
+  legal approval → ingestion/assessment → fake Sheets outbox completed in
+  identity-verified `discmon_programme_test`, using a fresh local PostgreSQL 16
+  cluster. Promotion initially remained disabled/legal-review-pending. No
+  production changes, external writes, workers, schedulers or notifications.
+- Source-exposed fixes: retain exact `www` hostname in static HTML allowlists
+  and source-root validation; recognize full-time internship conflicts.
+- Actual result: heuristic `mentorship`, score 66, hard gate/bucket excluded;
+  professional/India eligibility unknown; deadline/cutoff unknown. Live repeat
+  was HTTP 304: one opportunity/revision, no new material change. Fake Sheets
+  appended/synced once, then no-op; committed PostgreSQL records reloaded.
+- New minimal attributed CC-BY-SA fixture and three deterministic regressions;
+  PR #5 connected-flow regression unchanged. Focused: **4 passed in 0.78s**;
+  live-only harness: **1 passed in 3.88s**; full backend: **115 passed, 1 warning
+  in 25.56s** (existing feedparser deprecation). Ruff: `All checks passed!`;
+  mypy: `Success: no issues found in 61 source files`; `git diff --check`: exit 0.
+- [Detailed source permission, IDs, provenance, assessment and test evidence](task6-real-programme-validation.md).
+  **M5 remains PARTIAL**; real Sheets/external delivery is not verified. GitHub
+  CI is reported on the review PR; no unobserved result is claimed.
+
 ## 2026-11-13 — M5 connected discovery-to-Sheets regression
 
 The integration test exposed that `ingest_source` checked only `enabled`, so an

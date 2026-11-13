@@ -56,6 +56,8 @@ def detect_employment_conflict(text: str, opportunity_type: str) -> bool:
             "commit full-time",
             "full-time program",
             "full-time programme",
+            "full-time internship",
+            "full time internship",
             "must not hold another job",
             "exclusive commitment",
         )
