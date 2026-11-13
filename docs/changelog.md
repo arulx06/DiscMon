@@ -105,6 +105,29 @@ input; unset it before static inspection.` This was the expected safeguard,
 not a render pass. Only later static invocations deliberately removed those
 inputs; no daemon or remote host check was attempted.
 
+### Automatic CI and delivery
+
+Implementation commit `dd2c23a` passed every job (backend, web,
+compose-preflight) on both automatically triggered runs:
+
+- Push: https://github.com/arulx06/DiscMon/actions/runs/43336543594 — **success**.
+- PR: https://github.com/arulx06/DiscMon/actions/runs/43336552350 — **success**.
+
+CI's system Compose **v5.1.3** passed all **37** unit/static tests, the real
+smoke render and the unchanged production host checks. Backend PostgreSQL 18:
+`111 passed, 1 warning` (existing feedparser deprecation), Ruff `All checks
+passed!`, mypy `Success: no issues found in 61 source files`. Web typecheck,
+lint and build passed. No workflow was dispatched or rerun manually. Existing
+CI alone runs its pre-existing ephemeral test database migration; no local DB,
+manual migration or smoke runtime drill was performed.
+
+PR https://github.com/arulx06/DiscMon/pull/3 targets
+`handoff/stabilize-idfc-audit-20261112`, stays open/unmerged, and is linked to
+update monitoring with `reviewLoop.enabled=true`, `autoMerge=false`.
+GitHub auto-merge request is null. Both worktrees were preserved; original
+checkout remains clean and the new feature worktree is committed. This
+follow-up only records observed CI evidence; runtime acceptance remains pending.
+
 ### D. Safety and remaining acceptance gaps
 
 Locally, Docker subprocesses were restricted to `compose version`, `compose
