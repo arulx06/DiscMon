@@ -117,7 +117,9 @@ def _mock_gateway(
 async def _canonical_snapshot(session: AsyncSession, model) -> list[dict[str, object]]:
     records = (
         await session.scalars(
-            select(model).order_by(model.id).execution_options(populate_existing=True)
+            select(model)
+            .order_by(*model.__table__.primary_key.columns)
+            .execution_options(populate_existing=True)
         )
     ).all()
     return [

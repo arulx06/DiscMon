@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-13 — Task 11 PostgreSQL 18 connected Sheets HTTP proof
+
+- Extended the existing discovery-to-Sheets regression without changing services:
+  real gateway GET/header PUT/append POST/retry row PUT/independent GET over
+  deterministic MockTransport, 17 columns, lost-ack HTTP 503, one retry,
+  sanitized errors, successful SyncState recovery and no duplicate remote row.
+- Retained approval/legal negatives; added persisted canonical/source-link/
+  evidence/assessment snapshots, evidence hash/provenance, conservative
+  eligibility/deadlines and zero-alert assertions. Generalized the existing test
+  snapshot utility's ordering for composite primary keys.
+- Fresh task-only PostgreSQL **18.7**, database `discmon_task11_test`, user
+  `task11`, loopback `127.0.0.1:55441`, zero initial public tables verified
+  before schema creation; matching explicit test URLs and fail-closed guards.
+- Actual local output (all exit 0, commands/details in `docs/PROGRESS.md`):
+  focused pytest **34 passed**; full backend **167 passed, 1 existing warning**;
+  Ruff **All checks passed!**; mypy **no issues found in 61 source files**;
+  migrations and `git diff --check` **exit 0**. Final-head PostgreSQL 18 backend,
+  web and Compose CI results are attached to the Task 11 PR.
+- Task 10 was not repeated; no live provider/production resources were accessed.
+  **M5 remains PARTIAL**: fixture-connected proof does not close live non-ATS
+  connected acceptance or the remaining source/integration gaps. No merge/deploy.
+
 ## 2026-11-13 — Task 9 Sheets mirror integrity and mixed-batch errors
 
 - Required base verified as `c9b6555` on

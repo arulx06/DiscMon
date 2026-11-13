@@ -1,5 +1,53 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 11 PostgreSQL 18 connected discovery-to-Sheets regression
+
+- Verified remote checkpoint `384a7a1` on
+  `handoff/stabilize-idfc-audit-20261112`; created an isolated Task 11 worktree.
+  The original Hoplite checkout is unchanged. Task 10 remains accepted and was
+  not repeated. **M5 remains PARTIAL.**
+- Extended the existing synthetic non-ATS connected test, retaining candidate
+  review, idempotent promotion and direct-service source/legal gate negatives.
+  The real `SheetsGateway` now runs over `httpx.MockTransport`; only its
+  credential-creation boundary is replaced with dummy-token construction.
+- Asserted HTTP authorization, methods, exact spreadsheet/tab/ranges, query
+  parameters, JSON payloads and the ordered 17-column header. The simulated
+  append stores row 2 then returns HTTP 503 containing private error detail and
+  a dummy token. One failed outbox attempt records exactly one retry and only
+  `Google Sheets sync failed (HTTP 503)`; retry reads and updates physical row 2.
+  Independent real-gateway GET read-back proves one opportunity row/ID. Recovery
+  clears outbox/SyncState errors and records success; a no-work call makes no
+  gateway/request. Existing duplicate-row and disabled-sync negatives are reused.
+- Compared all persisted columns of opportunities, revisions, source links,
+  evidence and assessments before failure and after failure/recovery, with fresh
+  database reads. Asserted source/page and evidence hashes, revision and assessment
+  provenance, unknown eligibility/deadline precision, needs-verification gate and
+  bucket, non-AI assessment and zero alerts. The shared snapshot utility now
+  orders by actual primary-key columns to support composite-key source links.
+- Local resource proof before migration/tests: newly created, task-owned
+  `postgres:18-alpine` container; actual PostgreSQL **18.7** (180007), database
+  `discmon_task11_test`, current/session user `task11`, loopback
+  **127.0.0.1:55441**, zero initial public tables, and no existing DiscMon database.
+  Used an empty inherited environment, explicit `APP_ENV=test`, matching database
+  URLs and the unchanged fail-closed guards. Only this new test DB was migrated.
+- Executed from `services/api`, all exit 0:
+  - `python -m alembic upgrade head`: both migrations applied.
+  - `python -m pytest tests/test_discovery_to_sheets.py tests/test_sheets.py -q --tb=short`:
+    **34 passed**.
+  - `python -m pytest tests -q --tb=short`: **167 passed, 1 warning**
+    (existing feedparser deprecation).
+  - `ruff check app tests scripts`: **All checks passed!**
+  - `mypy app scripts`: **Success: no issues found in 61 source files**.
+  - `git diff --check`: **exit 0**.
+- Final-head PostgreSQL 18 backend, web and Compose CI evidence is attached to
+  the Task 11 PR; no historical run is substituted for this gate.
+- No production DB, real Google Sheet, live provider credentials or external
+  source was accessed. No workers, schedulers, deployments or real notifications
+  were started. No application/schema/CI changes. Remaining M5 acceptance is
+  live non-ATS connected discovery/review/ingestion/mirroring and the outstanding
+  source/integration acceptance work; deterministic HTTP proof is not live
+  programme acceptance. No Task 12 or merge is authorized.
+
 ## 2026-11-13 — Task 9 Sheets mirror integrity and mixed-batch errors
 
 - Required base verified as `c9b6555` on
