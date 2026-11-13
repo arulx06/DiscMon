@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.collectors.static_html import StaticHTMLAdapter
 from app.db.models.audit import AuditEvent
+from app.db.models.enums import SourceKind
+from app.db.models.evidence import RawEvidence
 from app.db.models.opportunity import Opportunity
 from app.db.session import get_db
 from app.main import app as fastapi_app
+from app.schemas.collector import FetchResult
 from app.services import ingestion
+from app.services.time import now_utc
 from tests.factories import FakeAdapter, make_candidate, make_source
 
 
@@ -141,3 +150,85 @@ async def test_api_missing_opportunity_returns_404(
 ) -> None:
     response = await client.get("/v1/opportunities/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
+
+
+@pytest.mark.integration
+async def test_outreachy_application_url_stays_unknown_through_ingestion_and_api(
+    client: httpx.AsyncClient, session: AsyncSession, monkeypatch
+) -> None:
+    fixtures = Path(__file__).parent / "fixtures" / "wikimedia_outreachy"
+    metadata = json.loads((fixtures / "capture.json").read_text())["pages"]["programme"]
+    body = (fixtures / "programme.html").read_bytes()
+    source = await make_source(
+        session, name="Wikimedia", kind=SourceKind.static_html, url=metadata["url"],
+        config={"organization_name": "Wikimedia", "description_selector": ".mw-parser-output"},
+    )
+
+    async def fixture_fetch(self, config, fetcher, cursor=None):
+        return FetchResult(
+            source_id=config.id, fetched_at=now_utc(), http_status=200,
+            raw_bytes=body, raw_hash=hashlib.sha256(body).hexdigest(),
+            source_url=metadata["url"], content_type=metadata["headers"]["content-type"],
+            last_modified=metadata["headers"]["last-modified"],
+        )
+
+    monkeypatch.setattr(StaticHTMLAdapter, "fetch", fixture_fetch)
+    await session.commit()
+    first = await ingestion.ingest_source(session, source.id)
+    await session.commit()
+    assert first.status == "success" and first.created == 1
+    opportunity = await session.scalar(select(Opportunity))
+    assert opportunity is not None
+    await session.refresh(opportunity)
+    assert opportunity.application_url is None
+    assert opportunity.employment_conflict is True
+
+    response = await client.get(f"/v1/opportunities/{opportunity.id}")
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["official_url"] == metadata["url"]
+    assert detail["application_url"] is None
+    assert detail["type"] == "programme"
+    assert detail["india_eligibility"] == detail["professional_eligibility"] == "unknown"
+    assert detail["deadline_precision"] == "unknown"
+    assert detail["deadline_on"] is detail["deadline_at"] is None
+    assert detail["assessment"]["hard_gate"] == "excluded"
+    assert detail["assessment"]["bucket"] == "excluded"
+    assert "full-time" in detail["assessment"]["reason"]
+    assert detail["sources"][0]["evidence"]["url"] == metadata["url"]
+    assert "full-time internship" in detail["sources"][0]["evidence"]["excerpt"]
+    evidence = await session.scalar(select(RawEvidence))
+    assert evidence is not None and evidence.content_json is not None
+    assert evidence.content_json["application_url"] is None
+    assert evidence.content_json["source_payload"]["page_hash"] == metadata["fixture_sha256"]
+    assert str(evidence.id) in detail["revisions"][0]["evidence_ids"]
+
+    repeated = await ingestion.ingest_source(session, source.id)
+    await session.commit()
+    assert repeated.skipped == 1 and repeated.created == repeated.updated == 0
+    await session.refresh(opportunity)
+    assert opportunity.application_url is None
+
+
+@pytest.mark.integration
+async def test_demo_seed_supplies_both_application_link_states(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    from scripts.seed_sources import seed_demo
+
+    assert await seed_demo(session) == 5
+    await session.commit()
+    assert await seed_demo(session) == 0
+    await session.commit()
+    for slug, expected_url in [
+        ("maintainer-residency", None),
+        ("senior-backend", "https://example.org/discmon-demo/senior-backend/apply"),
+    ]:
+        opportunity = await session.scalar(
+            select(Opportunity).where(Opportunity.provider_key == f"demo:{slug}")
+        )
+        assert opportunity is not None and opportunity.is_fixture is True
+        detail = await client.get(f"/v1/opportunities/{opportunity.id}")
+        assert detail.status_code == 200
+        assert detail.json()["application_url"] == expected_url
+        assert detail.json()["official_url"] == f"https://example.org/discmon-demo/{slug}"

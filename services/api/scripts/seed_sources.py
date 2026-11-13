@@ -162,6 +162,7 @@ DEMO_ROWS: list[dict[str, Any]] = [
     },
     {
         "slug": "maintainer-residency",
+        "application_url": None,
         "title": "[Demo] Open Source Maintainer Residency",
         "type": OpportunityType.residency,
         "description": (
@@ -350,7 +351,9 @@ async def seed_demo(session: AsyncSession) -> int:
             workplace_type=row["workplace"],
             location_text=row["location"],
             official_url=f"https://example.org/discmon-demo/{row['slug']}",
-            application_url=f"https://example.org/discmon-demo/{row['slug']}/apply",
+            application_url=row.get(
+                "application_url", f"https://example.org/discmon-demo/{row['slug']}/apply"
+            ),
             deadline_on=deadline_on,
             deadline_at=deadline_at,
             deadline_timezone=deadline_timezone,

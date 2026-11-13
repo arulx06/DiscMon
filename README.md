@@ -239,11 +239,52 @@ Pop-Location
 
 # Web typecheck, lint and build
 cd apps/web; npm run typecheck; npm run lint; npm run build
-
-# E2E (seed demo fixtures first; services must be running)
-docker compose exec api python /app/scripts/seed_sources.py --demo
-cd apps/web; npx playwright install chromium; npm run test:e2e
 ```
+
+For E2E, use a **fresh disposable** `*_test` database with the matching test
+variables above, never the production Compose database. From `services/api`,
+validate the actual connection before migrating/seeding it:
+
+```bash
+../../.venv/bin/python - <<'PYTHON'
+import os
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, text
+from tests.conftest import validate_test_environment, validate_connected_database
+
+target = validate_test_environment(os.environ)
+engine = create_engine(os.environ["DATABASE_URL"])
+with engine.connect() as connection:
+    identity = connection.execute(text(
+        "SELECT current_database() AS database, current_user AS username, "
+        "session_user AS session_username"
+    )).mappings().one()
+    validate_connected_database(
+        target, engine.url, identity, connection.connection.driver_connection.info
+    )
+engine.dispose()
+command.upgrade(Config("alembic.ini"), "head")
+PYTHON
+../../.venv/bin/python scripts/seed_sources.py --demo
+```
+
+This documented seed supplies both application-link cases: the labelled
+maintainer residency has no application URL; the labelled senior backend role
+has a separate `/apply` URL. No Outreachy ingestion or external collection is
+needed. Seeding is insert-only: use a fresh test DB rather than an old demo DB.
+
+Start the API with these same test DB settings and the web app pointed at it
+(`INTERNAL_API_URL`, with `INTERNAL_API_TOKEN` matching `OWNER_API_TOKEN`). No
+worker or scheduler is needed. After the web production build, from `apps/web`:
+
+```bash
+npx playwright install chromium
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e
+```
+
+Playwright exercises both link states, review persistence and overflow at 360px
+and 1440px. Missing demo records fail the tests; they are not silently skipped.
 
 This local deployment procedure was not the isolated M0 acceptance drill and
 does not establish production deployment acceptance.

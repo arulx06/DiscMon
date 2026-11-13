@@ -70,6 +70,8 @@ def classify_opportunity(title: str, text: str | None = None) -> OpportunityType
         return OpportunityType.grant
     if "accelerator" in title_lower or "founder" in title_lower:
         return OpportunityType.founder_programme
+    if re.search(r"\b(?:programmes?|programs?|cohorts?|internships?)\b", title_lower):
+        return OpportunityType.programme
     if any(word in title_lower for word in JOB_TITLE_WORDS):
         return OpportunityType.job
 
@@ -78,7 +80,7 @@ def classify_opportunity(title: str, text: str | None = None) -> OpportunityType
         return OpportunityType.fellowship
     if "residency" in lowered or "resident" in lowered:
         return OpportunityType.residency
-    if "mentorship" in lowered or "mentor" in lowered:
+    if "mentorship" in lowered:
         return OpportunityType.mentorship
     if "hackathon" in lowered:
         return OpportunityType.hackathon
@@ -88,6 +90,8 @@ def classify_opportunity(title: str, text: str | None = None) -> OpportunityType
         return OpportunityType.grant
     if "accelerator" in lowered or "founder" in lowered or "founding" in lowered:
         return OpportunityType.founder_programme
+    if re.search(r"\b(?:programmes?|programs?|cohorts?|internships?)\b", lowered):
+        return OpportunityType.programme
     if any(word in lowered for word in ("job", "engineer", "developer", "sre", "architect")):
         return OpportunityType.job
     if "program" in lowered or "programme" in lowered or "cohort" in lowered:

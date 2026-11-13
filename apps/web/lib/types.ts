@@ -88,7 +88,7 @@ export interface OpportunityAlert {
 }
 
 export interface OpportunityDetail extends OpportunityCard {
-  application_url: string;
+  application_url: string | null;
   description: string | null;
   requirements: string | null;
   qualification: Record<string, unknown> | null;

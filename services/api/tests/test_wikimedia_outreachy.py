@@ -52,8 +52,9 @@ def test_wikimedia_outreachy_preserves_full_time_constraint_and_field_origins() 
     assert candidate.title == "Outreachy"
     assert candidate.organization_name == "Wikimedia"  # Explicit source configuration.
     assert candidate.organization_domain == "mediawiki.org"
-    assert candidate.official_url == candidate.application_url == PROGRAMME_URL
-    assert candidate.opportunity_type == OpportunityType.mentorship
+    assert candidate.official_url == PROGRAMME_URL
+    assert candidate.application_url is None
+    assert candidate.opportunity_type == OpportunityType.programme
     assert "full-time internship" in candidate.evidence_excerpt
     assert candidate.source_payload == {"page_hash": metadata["fixture_sha256"]}
     assert candidate.country_codes == candidate.allowed_remote_countries == []

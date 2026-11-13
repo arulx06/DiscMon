@@ -147,11 +147,8 @@ def _apply_candidate(
         candidate.employment_conflict or opportunity.employment_conflict
     )
     opportunity.official_url = canonicalize_url(candidate.official_url)
-    opportunity.application_url = (
-        canonicalize_url(candidate.application_url)
-        if candidate.application_url and is_http_url(candidate.application_url)
-        else opportunity.official_url
-    )
+    if candidate.application_url and is_http_url(candidate.application_url):
+        opportunity.application_url = canonicalize_url(candidate.application_url)
     opportunity.opens_on = candidate.opens_on or opportunity.opens_on
     if candidate.deadline_precision.value != "unknown":
         opportunity.deadline_on = candidate.deadline_on

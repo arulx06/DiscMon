@@ -1,5 +1,95 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 7 final engineering corrections
+
+- Supersedes the initial Task 7 precedence and E2E seed requirements below.
+  Title-first classification is retained. Specific description-level categories
+  now precede generic programme/internship wording: generic `Community` title +
+  `A fellowship programme for engineers` → fellowship; `A technical residency
+  programme` → residency; `An open-source mentorship programme` → mentorship.
+  Outreachy + `A full-time internship. Resources: Mentors` remains programme;
+  bare `Information for mentors` remains other. Existing explicit-title cases
+  and Outreachy parser/API hard-gate/provenance assertions are unchanged.
+- The existing labelled maintainer residency demo row now has a null application
+  URL; the senior backend demo retains its `/apply` URL. Playwright checks those
+  two records rather than requiring a separately ingested Outreachy record.
+  Missing fixtures fail explicitly. API regression verifies both demo link
+  states and insert-only seed idempotency.
+- README now documents the guarded isolated E2E DB migration/`--demo` seed.
+  Executed that exact Bash snippet against newly created PostgreSQL 16.15 DB
+  `discmon_task7_e2e_test`, user/session user `task7`, loopback port 55437,
+  `APP_ENV=test` and matching explicit DB URLs. Existing guards verified actual
+  identity/endpoint before migration. Output: registry candidates created=17,
+  demo fixtures created=5; all five opportunities labelled, no Outreachy row or
+  external collection. No production DB, migration, backfill, deployment,
+  runtime smoke drill, worker, scheduler or external write was used.
+- Backend regressions ran against the separately guarded `discmon_task7_test`:
+  - `pytest tests/test_normalize.py tests/test_wikimedia_outreachy.py tests/test_adapters.py tests/test_ingestion_pipeline.py tests/test_api.py -q`:
+    **56 passed, 1 warning in 2.95s**.
+  - `pytest tests -q`: **136 passed, 1 warning in 27.14s** (existing feedparser
+    deprecation). Ruff: **All checks passed!**; mypy: **Success: no issues found
+    in 61 source files**.
+- Frontend `npm run typecheck`, `npm run lint`, `npm run build` passed.
+  Managed API/web Preview used only the fresh documented demo seed;
+  `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`:
+  **6 passed (3.5s)**, no skips, at 360px/1440px. Both link states, official
+  links, review persistence and overflow verified. `git diff --check`: exit 0.
+- Final-head GitHub CI evidence is recorded on PR #7. **M5 remains PARTIAL**;
+  no historical application URL backfill, dedicated static application-link
+  extraction, merge or Task 8 work is included.
+
+## 2026-11-13 — Task 7 evidence-accurate programme metadata (local verification)
+
+- Required base `926551e3c9600b2d58f18083b800bd28864bff0f` confirmed on
+  `handoff/stabilize-idfc-audit-20261112`; implementation stays on the thread branch.
+- Outreachy changes from heuristic **mentorship** to conservative **programme**.
+  Explicit title categories win over incidental body/resource mentions; bare
+  mentor mentions no longer establish mentorship. No enum/schema changes.
+- Static HTML overview and item links now leave `application_url` **null**.
+  Ingestion no longer falls back to the official URL; missing/empty/invalid new
+  application evidence preserves a previously supplied valid URL. Explicit
+  application URLs from other adapters remain intact; ATS parsers are unchanged.
+- Detail UI always retains Official source, hides Application page for null,
+  empty or invalid URLs, and retains verified application links. TypeScript
+  represents the application URL as nullable.
+- The Task 6 fixture's previous assertions encoded the two unsupported heuristic
+  assumptions (mentor-link category and article-as-application fallback); these
+  are replaced, not the safety assertions. Fixture/API regression still requires
+  full-time conflict and excluded hard gate/bucket, unknown professional/India
+  eligibility and deadline precision, original page hash and evidence references.
+- Isolated local PostgreSQL **16.15**, database `discmon_task7_test`, user/session
+  user `task7`, loopback port **55437**. `APP_ENV=test`, matching explicit
+  `DATABASE_URL`/`TEST_DATABASE_URL`; existing environment, SQL identity and
+  connected-endpoint guards passed before migrating this empty test DB and
+  before each test cleanup. No production DB, backups, ingestion, deployment,
+  external collection, Sheets writes, workers or scheduler were used.
+- Actual commands/results from `services/api`:
+  - `../../.venv/bin/pytest tests/test_normalize.py tests/test_wikimedia_outreachy.py tests/test_adapters.py tests/test_ingestion_pipeline.py tests/test_api.py -q`:
+    **52 passed, 1 warning in 2.98s**.
+  - `../../.venv/bin/pytest tests -q`: **132 passed, 1 warning in 30.06s**.
+    Warning: existing feedparser deprecation.
+  - `../../.venv/bin/ruff check app tests scripts`: **All checks passed!**
+  - `../../.venv/bin/mypy app scripts`: **Success: no issues found in 61 source files**.
+- From `apps/web`: `npm run typecheck`, `npm run lint`, `npm run build` passed.
+  Managed Preview used only that isolated DB, labelled demo fixtures and a
+  fixture-labelled replay of the existing Outreachy HTML through the real
+  static parser/ingestion; no live website requests. Browser DOM checks confirmed
+  the exact official URL with no application button, and the demo's separate
+  verified `/apply` link. `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`:
+  **6 passed (4.4s)** across 1440px and 360px, including review persistence and
+  both link states. The initial E2E attempt could not launch its missing browser;
+  installing the matching Playwright Chromium resolved it. E2E now requires both
+  the existing demo seed and the fixture-labelled Outreachy replay in its isolated
+  test DB; absence fails explicitly instead of skipping the safety check.
+- `git diff --check`: **exit 0**. Final-head GitHub CI is recorded on the review
+  PR; local PostgreSQL 16 evidence does not substitute for CI's PostgreSQL 18.
+- **M5 remains PARTIAL.** Classification is still a conservative heuristic, not
+  field-level official confirmation. Static HTML does not discover application
+  endpoints in this change. Historical inferred application URLs are not repaired
+  or distinguishable from supplied URLs; no backfill/migration is performed.
+  Production and external integration acceptance remain unchanged. No merge or
+  Task 8 work is authorized.
+
 ## 2026-11-13 — Task 6 real non-ATS programme validation
 
 - Live Wikimedia Outreachy discovery → API review/approval/promotion → test-only
