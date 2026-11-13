@@ -232,3 +232,33 @@ async def test_parse_error_is_recorded_without_erasing_existing_records(
     assert outcome.status == "failed"
     assert await session.scalar(select(func.count(Opportunity.id))) == 1
     assert await session.scalar(select(func.count(Assessment.id))) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("missing_url", [None, "", "javascript:void(0)"])
+async def test_application_evidence_survives_missing_or_invalid_update(
+    session: AsyncSession, monkeypatch, missing_url: str | None
+) -> None:
+    source = await make_source(session)
+    candidate = make_candidate()
+    adapter = FakeAdapter([candidate])
+    monkeypatch.setattr(ingestion, "get_adapter", lambda kind: adapter)
+    await session.commit()
+    assert (await ingestion.ingest_source(session, source.id)).created == 1
+    await session.commit()
+    opportunity = await session.scalar(select(Opportunity))
+    assert opportunity is not None
+    verified_url = candidate.application_url
+    assert opportunity.application_url == verified_url
+
+    candidate.application_url = missing_url
+    assert (await ingestion.ingest_source(session, source.id)).skipped == 1
+    await session.commit()
+    await session.refresh(opportunity)
+    assert opportunity.application_url == verified_url
+
+    candidate.application_url = "https://example.com/verified-new-application"
+    assert (await ingestion.ingest_source(session, source.id)).updated == 1
+    await session.commit()
+    await session.refresh(opportunity)
+    assert opportunity.application_url == candidate.application_url

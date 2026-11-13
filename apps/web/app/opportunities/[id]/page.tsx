@@ -14,6 +14,17 @@ function first(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
+function isHttpUrl(value: string | null): value is string {
+  if (!value) return false;
+
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export default async function OpportunityDetailPage({
   params,
   searchParams,
@@ -26,6 +37,7 @@ export default async function OpportunityDetailPage({
   const [item, brief] = await Promise.all([api.opportunity(id), api.brief(id)]);
   const assessment = item.assessment;
   const followupValue = item.followup_due_at ? item.followup_due_at.slice(0, 16) : "";
+  const applicationUrl = isHttpUrl(item.application_url) ? item.application_url : null;
 
   return (
     <>
@@ -55,9 +67,11 @@ export default async function OpportunityDetailPage({
           <a className="button primary" href={item.official_url} rel="noreferrer noopener" target="_blank">
             Official source
           </a>
-          <a className="button" href={item.application_url} rel="noreferrer noopener" target="_blank">
-            Application page
-          </a>
+          {applicationUrl ? (
+            <a className="button" href={applicationUrl} rel="noreferrer noopener" target="_blank">
+              Application page
+            </a>
+          ) : null}
         </div>
       </div>
 

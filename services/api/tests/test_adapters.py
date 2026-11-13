@@ -394,3 +394,21 @@ def test_invalid_greenhouse_payload_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="jobs"):
         GreenhouseAdapter().parse(source, result)
+
+
+def test_static_html_directory_link_is_not_application_evidence() -> None:
+    source = _source(
+        SourceKind.static_html,
+        root_url="https://example.org/programmes",
+        config={"item_selector": "article", "title_selector": "h2"},
+    )
+    result = _result(
+        source,
+        raw_bytes=(
+            b'<article><h2>Community Programme</h2>'
+            b'<a href="/overview">Programme overview</a></article>'
+        ),
+    )
+    candidate, = StaticHTMLAdapter().parse(source, result)
+    assert candidate.official_url == "https://example.org/overview"
+    assert candidate.application_url is None

@@ -70,15 +70,20 @@ def classify_opportunity(title: str, text: str | None = None) -> OpportunityType
         return OpportunityType.grant
     if "accelerator" in title_lower or "founder" in title_lower:
         return OpportunityType.founder_programme
+    if re.search(r"\b(?:programmes?|programs?|cohorts?|internships?)\b", title_lower):
+        return OpportunityType.programme
     if any(word in title_lower for word in JOB_TITLE_WORDS):
         return OpportunityType.job
 
     lowered = f"{title} {text or ''}".lower()
+    # A programme overview is not reclassified by its resource links or benefits.
+    if re.search(r"\b(?:programmes?|programs?|cohorts?|internships?)\b", lowered):
+        return OpportunityType.programme
     if "fellowship" in lowered:
         return OpportunityType.fellowship
     if "residency" in lowered or "resident" in lowered:
         return OpportunityType.residency
-    if "mentorship" in lowered or "mentor" in lowered:
+    if "mentorship" in lowered:
         return OpportunityType.mentorship
     if "hackathon" in lowered:
         return OpportunityType.hackathon

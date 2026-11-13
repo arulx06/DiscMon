@@ -1,3 +1,5 @@
+import pytest
+
 from app.db.models.enums import OpportunityType
 from app.services.normalize import classify_opportunity, parse_compensation_text
 
@@ -121,3 +123,26 @@ def test_compensation_supports_lpa_without_currency_token() -> None:
     assert result.cash == "6-8 LPA"
     assert result.period == "per year"
     assert result.summary == "Pay: 6-8 LPA"
+
+
+@pytest.mark.parametrize(
+    ("title", "text", "expected"),
+    [
+        ("OSS Mentorship", "A full-time programme with mentors.", OpportunityType.mentorship),
+        ("AI Fellowship", "Programme with mentor resources.", OpportunityType.fellowship),
+        ("AI Residency", "Internship and fellowship resources.", OpportunityType.residency),
+        ("Builder Programme", "Mentorship, fellowship and jobs.", OpportunityType.programme),
+        ("Summer Internship", "Information for mentors.", OpportunityType.programme),
+        ("Outreachy", "A full-time internship. Resources: Mentors", OpportunityType.programme),
+        ("Community", "Information for mentors", OpportunityType.other),
+        ("Backend Engineer", "Mentorship programme benefits", OpportunityType.job),
+        ("Annual Hackathon", "A programme with mentors", OpportunityType.hackathon),
+        ("Builder Challenge", "Mentorship programme", OpportunityType.competition),
+        ("Research Grant", "Mentorship programme", OpportunityType.grant),
+        ("Founder Accelerator", "Mentorship programme", OpportunityType.founder_programme),
+    ],
+)
+def test_category_evidence_precedes_incidental_body_mentions(
+    title: str, text: str, expected: OpportunityType
+) -> None:
+    assert classify_opportunity(title, text) == expected
