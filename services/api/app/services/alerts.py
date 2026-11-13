@@ -113,12 +113,13 @@ async def maybe_create_alerts(
 
 
 async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict:
+    # Dispatch owns its transaction: Telegram claims commit before external I/O.
     settings = get_settings()
     now = now_utc()
-    alerts = (
+    alert_ids = (
         (
             await session.execute(
-                select(Alert)
+                select(Alert.id)
                 .where(
                     Alert.status == AlertStatus.pending,
                     Alert.scheduled_for <= now,
@@ -132,7 +133,17 @@ async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict
     )
     sent = 0
     failed = 0
-    for alert in alerts:
+    processed = 0
+    for alert_id in alert_ids:
+        alert = await session.scalar(
+            select(Alert)
+            .where(Alert.id == alert_id, Alert.status == AlertStatus.pending)
+            .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
+        )
+        if alert is None:
+            continue
+        processed += 1
         if alert.channel == "in_app":
             alert.status = AlertStatus.sent
             alert.sent_at = now
@@ -140,9 +151,7 @@ async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict
             continue
         if alert.channel in {"email", "smtp"}:
             if not settings.smtp_enabled:
-                alert.last_error_redacted = (
-                    "SMTP is not configured; alert remains in in-app inbox"
-                )
+                alert.last_error_redacted = "SMTP is not configured; alert remains in in-app inbox"
                 failed += 1
                 continue
             try:
@@ -159,39 +168,130 @@ async def deliver_pending_alerts(session: AsyncSession, limit: int = 50) -> dict
                 failed += 1
             continue
         if alert.channel == "telegram":
+            profile = await session.scalar(
+                select(UserProfile)
+                .order_by(UserProfile.created_at)
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
+            if profile is None or "telegram" not in (profile.alert_channels or []):
+                alert.status = AlertStatus.suppressed
+                alert.last_error_redacted = (
+                    "Telegram consent revoked or absent; delivery suppressed"
+                )
+                continue
             if not settings.telegram_enabled:
                 alert.last_error_redacted = (
                     "Telegram is not configured; alert remains in in-app inbox"
                 )
                 failed += 1
                 continue
+            if is_within_quiet_hours(
+                now, profile.quiet_hours_start, profile.quiet_hours_end, profile.timezone
+            ):
+                alert.scheduled_for = next_allowed_slot(
+                    now, profile.quiet_hours_start, profile.quiet_hours_end, profile.timezone
+                )
+                continue
+            # A committed terminal claim prevents replay even if the process dies mid-send.
+            alert.status = AlertStatus.failed
+            alert.retry_count += 1
+            alert.last_error_redacted = (
+                "Telegram outcome unconfirmed; manual review required; do not automatically retry"
+            )
+            await session.commit()
+            profile = await session.scalar(
+                select(UserProfile)
+                .order_by(UserProfile.created_at)
+                .limit(1)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if profile is None or "telegram" not in (profile.alert_channels or []):
+                alert.status = AlertStatus.suppressed
+                alert.last_error_redacted = "Telegram consent revoked; delivery suppressed"
+                continue
+            current = now_utc()
+            if is_within_quiet_hours(
+                current, profile.quiet_hours_start, profile.quiet_hours_end, profile.timezone
+            ):
+                alert.status = AlertStatus.pending
+                alert.scheduled_for = next_allowed_slot(
+                    current, profile.quiet_hours_start, profile.quiet_hours_end, profile.timezone
+                )
+                alert.last_error_redacted = None
+                continue
             try:
-                message = _telegram_text(alert.payload_json)
-                async with httpx.AsyncClient(timeout=15) as client:
-                    response = await client.post(
-                        f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
-                        json={
-                            "chat_id": settings.telegram_allowed_chat_id,
-                            "text": message,
-                            "disable_web_page_preview": True,
-                        },
+                request = httpx.Request(
+                    "POST",
+                    f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
+                    json={
+                        "chat_id": settings.telegram_allowed_chat_id,
+                        "text": _telegram_text(alert.payload_json),
+                        "disable_web_page_preview": True,
+                    },
+                    extensions={"timeout": httpx.Timeout(15).as_dict()},
+                )
+                # Avoid AsyncClient's INFO log of the credential-bearing request URL.
+                async with httpx.AsyncHTTPTransport() as transport:
+                    response = await transport.handle_async_request(request)
+                    try:
+                        await response.aread()
+                    finally:
+                        await response.aclose()
+                if response.status_code in {401, 403}:
+                    alert.last_error_redacted = (
+                        "Telegram authorization rejected; review configuration"
                     )
-                response.raise_for_status()
-                alert.status = AlertStatus.sent
-                alert.sent_at = now
-                alert.provider_message_id = str(response.json().get("result", {}).get("message_id"))
-                sent += 1
+                elif response.status_code == 429:
+                    alert.last_error_redacted = (
+                        "Telegram rate limited; review provider backoff before manual retry"
+                    )
+                elif response.status_code == 200:
+                    body = response.json()
+                    if isinstance(body, dict) and body.get("ok") is False:
+                        _telegram_rejected(alert, "Telegram rejected request")
+                    elif _telegram_acknowledged(body, settings.telegram_allowed_chat_id):
+                        alert.status = AlertStatus.sent
+                        alert.sent_at = now_utc()
+                        alert.provider_message_id = str(body["result"]["message_id"])
+                        alert.last_error_redacted = None
+                        sent += 1
+                        continue
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
+                _telegram_rejected(alert, "Telegram connection unavailable before dispatch")
             except Exception:
-                alert.retry_count += 1
-                alert.last_error_redacted = "Telegram delivery failed; see server logs"
-                alert.status = AlertStatus.failed if alert.retry_count >= 4 else AlertStatus.pending
-                failed += 1
+                # Never include exception text, URLs, destinations or provider bodies.
+                pass
+            failed += 1
             continue
         alert.status = AlertStatus.failed
         alert.last_error_redacted = f"Unsupported channel: {alert.channel}"
         failed += 1
     await session.flush()
-    return {"sent": sent, "failed": failed, "processed": len(alerts)}
+    return {"sent": sent, "failed": failed, "processed": processed}
+
+
+def _telegram_rejected(alert: Alert, message: str) -> None:
+    alert.status = AlertStatus.failed if alert.retry_count >= 4 else AlertStatus.pending
+    alert.last_error_redacted = message
+
+
+def _telegram_acknowledged(body: object, chat_id: str | None) -> bool:
+    if not isinstance(body, dict) or body.get("ok") is not True:
+        return False
+    result = body.get("result")
+    if not isinstance(result, dict):
+        return False
+    message_id = result.get("message_id")
+    chat = result.get("chat")
+    return (
+        type(message_id) is int
+        and message_id > 0
+        and isinstance(chat, dict)
+        and type(chat.get("id")) is int
+        and str(chat["id"]) == chat_id
+    )
 
 
 def _send_smtp(subject: str, message: str) -> None:

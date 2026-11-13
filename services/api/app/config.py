@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -90,7 +91,12 @@ class Settings(BaseSettings):
 
     @property
     def telegram_enabled(self) -> bool:
-        return bool(self.telegram_bot_token and self.telegram_allowed_chat_id)
+        chat = self.telegram_allowed_chat_id or ""
+        return bool(
+            self.telegram_bot_token
+            and re.fullmatch(r"-?[1-9][0-9]{0,18}", chat)
+            and -(2**63) < int(chat) < 2**63
+        )
 
     @property
     def smtp_enabled(self) -> bool:
