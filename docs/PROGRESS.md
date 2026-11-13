@@ -53,11 +53,19 @@
   fail-closed pytest isolation safeguards. Actual post-fix commands/results:
   - `python -m pytest tests/test_discovery_scheduler.py tests/test_discovery_monthly_review.py -q -s`:
     **49 passed in 3.62s**, exit **0**.
-  - VALIDATION_PENDING
+  - `python -m pytest tests/test_discovery_webhook.py tests/test_queue.py tests/test_webhook_worker.py tests/test_github_watch_worker.py -q`:
+    **35 passed in 55.07s**, exit **0**.
+  - `python -m pytest tests -q`: **268 passed, 1 existing feedparser warning in
+    89.53s**, exit **0**.
   - `python -m ruff check app tests scripts`: **All checks passed!**, exit **0**.
   - `python -m mypy app scripts`: **61 source files, no issues**, exit **0**.
   - `git diff --check` (root): clean, exit **0**.
-- Cleanup and final-head CI will be recorded after verification; no generated
+- Ownership-checked `docker rm -f discmon-task15b-run_cd9d45abbc9c4d828c7ab7f25de61dd8-pg18` and
+  `docker volume rm discmon-task15b-run_cd9d45abbc9c4d828c7ab7f25de61dd8-data` both exit **0**;
+  final container/volume inventories empty, matching initial inventory.
+  Original checkout is clean and unchanged; only this task's resources removed.
+  Final-head backend/web/Compose CI is recorded on existing PR #14 after push;
+  historical Task 15 CI is not evidence for this correction. No generated
   logs are committed. Offline fixtures only: no live provider, production data,
   existing backups/volumes, credentials, deployments or scheduler/worker daemons.
   **M5 remains PARTIAL.** No merge, auto-merge, Task 16 or M6 authorized.

@@ -11,7 +11,11 @@
   sources/next period, concurrent ticks, synchronized insert collision and
   suppression of misleading discovery activity logs. Original 39 Task 15
   focused cases are preserved; **49 focused passed** after correction.
-- Full validation and cleanup evidence is recorded in `PROGRESS.md`; final-head
+- Final local checks, all exit 0: **49 focused passed**, **35 existing connected
+  regressions passed**, **268 full backend passed** (one existing feedparser
+  warning), Ruff clean, mypy clean (61 files), whitespace clean. Owned PostgreSQL
+  18.7 container/volume removed; exact commands, isolation identity, before/after
+  results and cleanup evidence are recorded in `PROGRESS.md`; final-head
   backend/web/Compose CI is tracked on existing PR #14. No generated logs,
   live-provider access, production change, merge or deployment. **M5 PARTIAL**.
 
