@@ -1,5 +1,34 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 17D worker graceful shutdown (review-only, not deployed)
+
+- Isolated correction from exact accepted Task 17C `4e0448f`. Independently
+  substantiate the worker callback's local-flag scope bug with real signals
+  and bytecode. Update the real module flag on the event loop and interrupt
+  only idle waiting; no unsafe cancellation or forced-stop deadline.
+- Guard claims after session entry; let a claim/commit already underway finish
+  its one job and normal outcome recording. No subsequent claim after observed
+  shutdown. Preserve transaction, idempotency, provenance, retries and recovery.
+- Regression fails on original worker (exit 1); final **12 worker shutdown tests**
+  plus queue integration (**13 focused cases**) pass. Both SIGTERM and SIGINT
+  cover idle, active success/failure and claim/commit waits. Complete existing
+  opportunity/pending/next-job rows unchanged; one attempt and cleared locks;
+  failure rolls back fixture work and is eligible only after its retry delay.
+- Final **320 backend tests**, **79 host/script tests**, Ruff, mypy (63 files),
+  compilation and Compose validation pass, exit **0**. One existing feedparser
+  deprecation warning. Task 17C scheduler/controller/backup/queue files unchanged.
+- Actual Docker `stop --timeout=-1`: unmodified entry point idle **0.214s**;
+  fixture idle **0.212s**, success **1.407s**, failure **1.387s**, claim **1.399s**,
+  commit **1.403s**. All CLI/app exits **0**, no OOM/forced signal, no watchdog,
+  exactly one claim, normal completed/retry outcomes and untouched pending work.
+- Exact inventory, commands, outputs, timings and remaining at-least-once/lease
+  risks: `docs/task17d-review.md` and `docs/evidence/task17d-*.txt`. Initial Docker
+  marker-mount refusal recovered using repo-local markers, without policy changes.
+- No production access, ingestion, migration, deployment, laptop validation or
+  live Docker/systemd changes. After review and corrected-image installation,
+  owner-approved Ubuntu retesting can resume; controller adoption is not claimed.
+  PRs #16/#17 unmerged; no force push, protected update or auto-merge approval.
+
 ## 2026-11-13 — Task 17C scheduler graceful shutdown (review-only, not deployed)
 
 - Reproduced the pre-existing nested-scope signal-handler bug on reviewed Task

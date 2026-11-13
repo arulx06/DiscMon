@@ -1,0 +1,69 @@
+import asyncio
+import dis
+import signal
+import subprocess
+import types
+
+from app import worker
+
+original = types.ModuleType('baseline_worker')
+exec(subprocess.check_output(['git', 'show', '4e0448f:services/api/app/worker.py'], text=True), original.__dict__)
+original._install_signal_handlers()
+print('Original callback:')
+dis.dis(signal.getsignal(signal.SIGTERM))
+signal.raise_signal(signal.SIGTERM)
+print('Original actual loop flag after SIGTERM:', original._running)
+assert original._running
+
+async def corrected():
+    wakeup = asyncio.Event()
+    worker._install_signal_handlers(wakeup)
+    callback = signal.getsignal(signal.SIGTERM)
+    print('Corrected OS callback:')
+    dis.dis(callback)
+    print('Loop callback:')
+    stop = dict(zip(callback.__code__.co_freevars, callback.__closure__))['stop'].cell_contents
+    dis.dis(stop)
+    signal.raise_signal(signal.SIGTERM)
+    print('Before loop observation:', worker._running, wakeup.is_set())
+    assert worker._running and not wakeup.is_set()
+    await asyncio.sleep(0)
+    print('After loop observation:', worker._running, wakeup.is_set())
+    assert not worker._running and wakeup.is_set()
+
+asyncio.run(corrected())
+--- output: .venv/bin/python /tmp/task17d_scope.py ---
+Original callback:
+ 27           0 RESUME                   0
+
+ 28           2 LOAD_CONST               1 (False)
+              4 STORE_FAST               1 (_running)
+              6 RETURN_CONST             0 (None)
+Original actual loop flag after SIGTERM: True
+Corrected OS callback:
+              0 COPY_FREE_VARS           2
+
+ 32           2 RESUME                   0
+
+ 34           4 LOAD_DEREF               1 (loop)
+              6 LOAD_ATTR                1 (NULL|self + call_soon_threadsafe)
+             26 LOAD_DEREF               2 (stop)
+             28 CALL                     1
+             36 POP_TOP
+             38 RETURN_CONST             0 (None)
+Loop callback:
+              0 COPY_FREE_VARS           1
+
+ 27           2 RESUME                   0
+
+ 29           4 LOAD_CONST               1 (False)
+              6 STORE_GLOBAL             0 (_running)
+
+ 30           8 LOAD_DEREF               0 (wakeup)
+             10 LOAD_ATTR                3 (NULL|self + set)
+             30 CALL                     0
+             38 POP_TOP
+             40 RETURN_CONST             0 (None)
+Before loop observation: True False
+After loop observation: False True
+scope probe exit=0
