@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-11-13 — Task 8 Sheets outbox failure recovery
+
+- Verified required base `63bb3fc` on `handoff/stabilize-idfc-audit-20261112`;
+  implementation stays on the existing thread branch. **M5 remains PARTIAL.**
+- Gateway creation/credential refresh, initial read and empty-sheet header-write
+  failures now mark only the locked, selected outbox batch failed, increment
+  retries once and record attempt time plus a credential-safe error. The shared
+  failure helper also updates integration status without erasing prior success
+  time/row key. Row-write errors use the same sanitizer instead of raw exception
+  text. Successful recovery clears errors and records a new success time.
+- Existing retry cap, skip-locked selection and idempotent row upserts remain;
+  instantiated gateways close on preflight failure. Disabled/unconfigured paths
+  make no outbound requests and consume no retries. No schema/model changes.
+- Deterministic tests use real SheetsGateway HTTP methods through
+  `httpx.MockTransport`, dummy tokens and mocked credential loading/refresh.
+  Covered credential-load/auth failures, GET 403/429/503 and connection failure,
+  header PUT failure, gateway close, batch selection/counts/attempt timestamps,
+  retry cap, visible errors, prior-success preservation, recovery/header creation
+  and exactly one opportunity row after a subsequent upsert. Persisted
+  opportunity/assessment/review snapshots remain unchanged on read failures;
+  the existing discovery-to-Sheets lost-acknowledgement regression still passes.
+  Its raw-error assertion now requires the sanitized message; safety assertions
+  were retained.
+- Disposable PostgreSQL **16.15**: newly initialized, thread-owned data directory,
+  database `discmon_task8_test`, owner/current/session user `task8`, loopback
+  **55438**. Before migration/test execution an independent SQL check verified
+  database/user, endpoint, disposable owner and the exact dedicated data directory;
+  existing fail-closed test guards run before each cleanup. Only this newly
+  created test DB was migrated. No production DB, live credentials/API calls,
+  real spreadsheet, external ingestion, deployments, backup changes or
+  scheduler/worker services were used.
+- Actual local verification from `services/api` (guarded wrapper sets explicit
+  matching DB URLs and `APP_ENV=test`):
+  - `python -m pytest tests/test_sheets.py tests/test_discovery_to_sheets.py -q`:
+    **14 passed**.
+  - `python -m pytest tests -q`: **147 passed, 1 warning** (existing feedparser
+    deprecation).
+  - `python -m ruff check app tests scripts`: **All checks passed!**
+  - `python -m mypy app scripts`: **Success: no issues found in 61 source files**.
+  - `git diff --check`: **exit 0**.
+- Final-head GitHub CI is tracked on the single Task 8 PR; local PostgreSQL 16
+  verification is not a claim of CI/PostgreSQL 18 proof. No frontend or browser
+  work: the UI contract is unchanged. All Sheets delivery here is emulated,
+  not live integration acceptance. Remaining M5 gaps include verified service
+  account sharing and real non-ATS discovery → approval/promotion → verification
+  → scoring → Sheets mirroring, plus live external integration delivery.
+  No merge or Task 9 work is authorized by this entry.
+
 ## 2026-11-13 — Task 7 final engineering corrections
 
 - Supersedes the initial Task 7 precedence and E2E seed requirements below.
