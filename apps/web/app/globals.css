@@ -178,6 +178,71 @@ p {
   font-size: 0.86rem;
 }
 
+.runtime-schedule {
+  margin-top: 18px;
+}
+
+.runtime-fields {
+  align-items: start;
+}
+
+.runtime-summary {
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  align-content: center;
+}
+
+.runtime-saved {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.runtime-saved h3:not(:first-child) {
+  margin-top: 18px;
+}
+
+.runtime-message,
+.runtime-guidance {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.runtime-message {
+  margin: 0;
+}
+
+.runtime-error {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.runtime-warning {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.runtime-success {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.runtime-guidance {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.runtime-guidance p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 520px) {
+  .runtime-schedule .actions > button {
+    flex: 1 1 100%;
+  }
+}
+
 .tiny {
   font-size: 0.78rem;
 }
