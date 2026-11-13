@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-13 — Task 14 GitHub-watch ingestion and revision verification
+
+- Add two deterministic release fixtures and **35 regressions**: 15 real
+  PostgreSQL/API/queue/worker connected cases and 20 adapter safety cases.
+  Prove one release's date-only deadline update yields one new material revision
+  and alert, preserves original evidence and coalesces Sheets work; unchanged
+  repeats and provider failures cannot duplicate or erase canonical output.
+- Fix five reproduced GitHub-only defects: reject malformed API shapes instead
+  of reporting empty success, skip issue-feed pull requests, avoid merging owners
+  through `github.com`, leave unverified application URLs absent and persist
+  original API objects as evidence. Existing queue locks/UUID generations and
+  application services remain unchanged; no migration or record backfill.
+- Isolated PostgreSQL **18.7**, cluster **7707688725725106215**,
+  `discmon_task14_test`, user `discmon_task14`, loopback **127.0.0.1:55434**;
+  independently empty before migration. All exit 0: new **35 passed**; existing
+  adapter/ingestion/queue/Task 13 **40 passed**; full backend **219 passed** with
+  one existing feedparser warning; Ruff clean; mypy clean (**61 files**);
+  `git diff --check` clean. Commands/isolation proof are recorded in `PROGRESS.md`;
+  actual outputs and pre-fix failures are supplied separately, not committed logs.
+- Task-only container/volume cleanup; no live provider access, delivery, Sheets
+  writes, secrets, production state, deployments or merge. **M5 remains PARTIAL**;
+  final-head backend/web/Compose CI and independent review belong to the single PR.
+
 ## 2026-11-13 — Task 13 webhook-to-worker material revision regression
 
 - Add two deterministic official-style fellowship HTML fixtures and 16 connected

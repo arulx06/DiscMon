@@ -1,5 +1,68 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 14 connected GitHub-watch regression
+
+- Verified remote `handoff/stabilize-idfc-audit-20261112` at accepted `928e187`;
+  isolated worktree/branch, original checkout preserved. **M5 remains PARTIAL.**
+- Added **35 tests** (15 connected PostgreSQL cases, 20 adapter safety cases)
+  and two synthetic GitHub releases. Real source-run API → source queue/claim →
+  worker `process_job` → GitHubAdapter/SafeFetcher → ingestion, evidence,
+  revisions, assessments and alert/Sheets-outbox decisions. Only external HTTP
+  and DNS are substituted; safety-unit retry count is test configuration.
+- Same repository/release ID **14001**: one canonical opportunity and source
+  link; deadline **2027-03-12 → 2027-03-19**, date-only with no invented time or
+  timezone. Two material revisions retain original release objects, evidence
+  hashes and source-run references. Both assessments score **94**, hard gate
+  `passed`, bucket `act_now`, explicit professional/India eligibility verified.
+  Three unchanged repeats leave two in-app immediate alerts, one coalesced
+  pending Sheets row, two revisions and five assessment-history entries.
+- Five minimal, regression-proven corrections, all confined to `github.py`:
+  malformed/non-array/non-object API responses fail visibly instead of becoming
+  empty successes; issue mode skips pull requests; GitHub's shared hosting domain
+  is not an owner's canonical organization domain; announcements do not invent
+  application URLs; original API objects survive in persisted evidence.
+  No schema, queue, ingestion, worker or scheduler changes/backfills.
+- Verified repository-scoped/stable IDs, distinct releases and owners, explicit
+  eligible issue parsing, inert hostile markup, unknown India eligibility from
+  remote wording, student-only exclusion and suppression of eligibility alerts.
+  HTTP 403/429/503, transport failure, malformed/invalid JSON, partial multi-repo
+  failures, private DNS/endpoints and loopback/metadata redirects remain visible.
+  Three failures never erase records, close opportunities or increment absences.
+  Source failure is recorded even when dispatch completes its job successfully;
+  this preserves the existing worker contract, not a new job-retry policy.
+- Approval/legal/enabled state is asserted and rechecked after queueing; revocation
+  prevents HTTP and canonical output. Eight concurrent enqueuers produce one
+  active job; queued/running/retry-wait suppress overlap, another source remains
+  schedulable and completion permits immediate fresh work. Task 13 is unchanged.
+- Fresh task-owned PostgreSQL **18.7**: `discmon_task14_test`, current/session user
+  `discmon_task14`, client **127.0.0.1:55434**, server **172.17.0.2:5432**,
+  cluster **7707688725725106215**, container `discmon-task14-pg18` (`2bd5ff9ee608`).
+  Independently checked zero initial public tables before Alembic upgrade to
+  `d4a7c1e9f210` (exit 0). An empty inherited environment supplies `APP_ENV=test`
+  and identical explicit DB URLs; no `PG*` or integration credentials inherited.
+  Existing fail-closed fixtures remain unchanged.
+- Local commands from `services/api`, all **exit 0**:
+  - `pytest tests/test_github_safety.py tests/test_github_watch_worker.py -q -s`:
+    **35 passed**.
+  - `pytest tests/test_adapters.py tests/test_ingestion_pipeline.py tests/test_queue.py tests/test_webhook_worker.py -q`:
+    **40 passed**, one existing feedparser warning.
+  - `pytest tests -q`: **219 passed**, same existing warning.
+  - `ruff check app tests scripts`: **All checks passed!**
+  - `mypy app scripts`: **no issues in 61 source files**.
+  - `git diff --check`: **exit 0**.
+- Separate sanitized execution report retains actual pre-fix failures, synthetic
+  job/record IDs, HTTP outcomes and final output; generated reports/raw logs are
+  not committed. Final-head backend/web/Compose CI is tracked on the review-only
+  PR. A complete Hoplite session export is unavailable through attached tools.
+- Only this task's database container and anonymous volume are removed after
+  verification. No live GitHub/source, Sheets, secret files, delivery providers,
+  AI, production scheduler/worker daemon, production database, backup, deployment
+  or merge is used. Source-control GitHub operations are separate from mocked
+  collector-provider requests. No retroactive repair of previously stored records.
+- Remaining M5: live GitHub/provider and delivery acceptance, wider source coverage,
+  optional RSSHub/monthly discovery remain outside this offline proof; M6 is not
+  started. Fixed March 2027 fixture deadlines need refreshing before expiry.
+
 ## 2026-11-13 — Task 13 connected changedetection webhook verification
 
 - Verified the remote handoff baseline at `b739b66`; used a separate worktree
