@@ -32,7 +32,7 @@ DEFAULT_PORTS = smoke.DEFAULT_PORTS.copy()
 COMPOSE_CAPABILITIES = "--no-env-resolution --format"
 CHILD_ENV_KEYS = {
     "PATH", "HOME", "DOCKER_CONFIG", "LANG", "DISCMON_SMOKE_PROJECT",
-    "DISCMON_SMOKE_DB_PORT", "DISCMON_SMOKE_API_PORT", "DISCMON_SMOKE_WEB_PORT",
+    "DISCMON_SMOKE_API_PORT", "DISCMON_SMOKE_WEB_PORT",
 }
 
 
@@ -43,17 +43,22 @@ def resolved_config(project=PROJECT, ports=None, root=None):
     environment["api"]["DATABASE_URL"] = smoke.DB_URL
     services = {}
     for name in ("postgres", "api", "web"):
+        networks = {"private": None} if name == "postgres" else {
+            "private": None, "ingress": None,
+        }
         service = {
             "restart": "no",
-            "networks": {"default": None},
+            "networks": networks,
             "environment": environment[name],
-            "ports": [{
+            "ports": [],
+        }
+        if name in {"api", "web"}:
+            service["ports"] = [{
                 "host_ip": "127.0.0.1",
                 "published": str(ports[name]),
                 "target": smoke.TARGET_PORTS[name],
                 "protocol": "tcp",
-            }],
-        }
+            }]
         if name == "postgres":
             service.update({
                 "image": "postgres:18-alpine",
@@ -95,10 +100,8 @@ def resolved_config(project=PROJECT, ports=None, root=None):
         "services": services,
         "volumes": {"pgdata": {"name": f"{project}_pgdata"}},
         "networks": {
-            "default": {
-                "name": f"{project}_default",
-                "internal": True,
-            },
+            "private": {"name": f"{project}_private", "internal": True},
+            "ingress": {"name": f"{project}_ingress"},
         },
     }
 
@@ -183,8 +186,21 @@ class ComposeSmokeTests(unittest.TestCase):
     def test_valid_resolved_model_is_isolated_and_canonical(self):
         smoke.inspect_config(self.config, PROJECT, DEFAULT_PORTS)
         self.assertEqual(self.config["volumes"], {"pgdata": {"name": f"{PROJECT}_pgdata"}})
-        self.assertTrue(self.config["networks"]["default"]["internal"])
+        self.assertEqual(smoke.DEFAULT_PORTS, {"api": 38000, "web": 33000})
+        self.assertEqual(smoke.TARGET_PORTS, {"api": 8000, "web": 3000})
+        self.assertEqual(self.config["networks"], {
+            "private": {"name": f"{PROJECT}_private", "internal": True},
+            "ingress": {"name": f"{PROJECT}_ingress"},
+        })
         self.assertEqual(set(self.config["services"]), {"postgres", "api", "web"})
+        self.assertEqual(self.config["services"]["postgres"]["ports"], [])
+        self.assertEqual(self.config["services"]["postgres"]["networks"], {"private": None})
+        self.assertEqual(self.config["services"]["api"]["networks"], {
+            "private": None, "ingress": None,
+        })
+        self.assertEqual(self.config["services"]["web"]["networks"], {
+            "private": None, "ingress": None,
+        })
         self.assertTrue(
             self.config["services"]["api"]["environment"]["DATABASE_URL"] == smoke.DB_URL,
         )
@@ -216,11 +232,11 @@ class ComposeSmokeTests(unittest.TestCase):
             with self.subTest(project=project), self.assertRaises(Unsafe):
                 smoke.validate_project(project)
         invalid_ports = (
-            {**DEFAULT_PORTS, "postgres": 55432},
             {**DEFAULT_PORTS, "api": 8000},
             {**DEFAULT_PORTS, "web": 3000},
-            {"postgres": 38001, "api": 38001, "web": 33001},
+            {"api": 38001, "web": 38001},
             {**DEFAULT_PORTS, "web": 80},
+            {**DEFAULT_PORTS, "postgres": 55432},
         )
         for ports in invalid_ports:
             with self.subTest(ports=ports), self.assertRaises(Unsafe):
@@ -231,16 +247,41 @@ class ComposeSmokeTests(unittest.TestCase):
             ("external volume", lambda c: c["volumes"]["pgdata"].update({"external": True})),
             ("reused volume", lambda c: c["volumes"]["pgdata"].update({"name": "production_pgdata"})),
             ("custom volume", lambda c: c["volumes"].update({"shared": {"name": "shared"}})),
-            ("external network", lambda c: c["networks"]["default"].update({"external": True})),
-            ("custom network", lambda c: c["networks"]["default"].update({"driver": "overlay"})),
-            ("reused network", lambda c: c["networks"]["default"].update({"name": "production"})),
+            ("external network", lambda c: c["networks"]["ingress"].update({"external": True})),
+            ("custom network", lambda c: c["networks"]["ingress"].update({"driver": "overlay"})),
+            ("reused network", lambda c: c["networks"]["ingress"].update({"name": "production"})),
             ("extra network", lambda c: c["networks"].update({"outside": {"name": "outside"}})),
-            ("non-internal network", lambda c: c["networks"]["default"].update({"internal": False})),
+            ("missing private network", lambda c: c["networks"].pop("private")),
+            ("internal ingress", lambda c: c["networks"]["ingress"].update({"internal": True})),
+            ("non-internal private", lambda c: c["networks"]["private"].update({"internal": False})),
         )
         for label, mutate in mutations:
             config = copy.deepcopy(self.config)
             mutate(config)
             with self.subTest(resource=label):
+                self.assert_config_rejected(config)
+
+    def test_service_network_routes_and_per_network_attributes_are_exact(self):
+        mutations = (
+            ("postgres ingress", lambda c: c["services"]["postgres"]["networks"].update({"ingress": None})),
+            ("api missing private", lambda c: c["services"]["api"]["networks"].pop("private")),
+            ("api missing ingress", lambda c: c["services"]["api"]["networks"].pop("ingress")),
+            ("web missing private", lambda c: c["services"]["web"]["networks"].pop("private")),
+            ("web missing ingress", lambda c: c["services"]["web"]["networks"].pop("ingress")),
+            ("alias", lambda c: c["services"]["api"]["networks"].update({
+                "private": {"aliases": ["api-alias"]},
+            })),
+            ("custom per-network attribute", lambda c: c["services"]["web"]["networks"].update({
+                "ingress": {"ipv4_address": "192.0.2.10"},
+            })),
+            ("extra service network", lambda c: c["services"]["api"]["networks"].update({
+                "outside": None,
+            })),
+        )
+        for label, mutate in mutations:
+            config = copy.deepcopy(self.config)
+            mutate(config)
+            with self.subTest(network=label):
                 self.assert_config_rejected(config)
 
     def test_secret_bind_and_extra_mounts_are_refused(self):
@@ -263,8 +304,16 @@ class ComposeSmokeTests(unittest.TestCase):
             with self.subTest(mount=index):
                 self.assert_config_rejected(config)
 
-    def test_inherited_production_ports_and_public_binds_are_refused(self):
-        production_ports = {"postgres": 55432, "api": 8000, "web": 3000}
+    def test_postgres_ports_and_inherited_production_or_public_binds_are_refused(self):
+        config = copy.deepcopy(self.config)
+        config["services"]["postgres"]["ports"] = [{
+            "host_ip": "127.0.0.1", "published": "55432", "target": 5432, "protocol": "tcp",
+        }]
+        self.assert_config_rejected(config, message="PostgreSQL host ports are forbidden.")
+        config = copy.deepcopy(self.config)
+        config["services"]["postgres"].pop("ports")
+        smoke.inspect_config(config, PROJECT, DEFAULT_PORTS)
+        production_ports = {"api": 8000, "web": 3000}
         for service, host_port in production_ports.items():
             config = copy.deepcopy(self.config)
             config["services"][service]["ports"][0]["published"] = str(host_port)
@@ -331,7 +380,7 @@ class ComposeSmokeTests(unittest.TestCase):
         invalid_arguments = (
             ["--project", PROJECT, "--env-file", SENTINEL],
             ["--project", PROJECT, "--unknown-option", "value"],
-            ["--project", PROJECT, "--db-port", "39001", "--db-port", "39002"],
+            ["--project", PROJECT, "--db-port", "39001"],
         )
         for arguments in invalid_arguments:
             with self.subTest(option_case=len(arguments)):
@@ -470,7 +519,7 @@ class ComposeSmokeTests(unittest.TestCase):
                 "DATABASE_URL": SENTINEL,
                 "POSTGRES_PASSWORD": SENTINEL,
             }
-            for custom_ports in (None, {"postgres": 56433, "api": 38001, "web": 33001}):
+            for custom_ports in (None, {"api": 38001, "web": 33001}):
                 ports = DEFAULT_PORTS if custom_ports is None else custom_ports
                 commands = []
                 environments = []
@@ -493,7 +542,6 @@ class ComposeSmokeTests(unittest.TestCase):
                 arguments = ["--project", PROJECT]
                 if custom_ports:
                     arguments += [
-                        "--db-port", str(custom_ports["postgres"]),
                         "--api-port", str(custom_ports["api"]),
                         "--web-port", str(custom_ports["web"]),
                     ]
@@ -505,13 +553,28 @@ class ComposeSmokeTests(unittest.TestCase):
                 self.assertEqual(len(commands), 3)
                 self.assertEqual(len(rendered_configs), 1)
                 self.assert_database_environment_consistent(rendered_configs[0])
+                rendered_networks = {
+                    name: {key: value for key, value in network.items()
+                           if key != "ipam" or value}
+                    for name, network in rendered_configs[0]["networks"].items()
+                }
+                self.assertEqual(rendered_networks, {
+                    "private": {"name": f"{PROJECT}_private", "internal": True},
+                    "ingress": {"name": f"{PROJECT}_ingress"},
+                })
+                for service in ("api", "web"):
+                    binding = rendered_configs[0]["services"][service]["ports"]
+                    self.assertEqual(len(binding), 1)
+                    self.assertEqual(str(binding[0]["published"]), str(ports[service]))
+                    self.assertEqual(binding[0]["target"], smoke.TARGET_PORTS[service])
+                self.assertEqual(rendered_configs[0]["services"]["postgres"].get("ports", []), [])
                 self.assertEqual([self.compose_operation(command) for command in commands], ["version", "config", "config"])
                 for command in commands:
                     self.assertEqual(command[1], "compose")
                     self.assertNotIn(command[2], {"info", "ps", "up", "run", "exec", "build", "pull"})
                 self.assertEqual(commands[2][commands[2].index("--env-file") + 1], "/dev/null")
                 self.assertIn("--no-env-resolution", commands[2])
-                self.assertEqual(environments[-1]["DISCMON_SMOKE_DB_PORT"], str(ports["postgres"]))
+                self.assertNotIn("DISCMON_SMOKE_DB_PORT", environments[-1])
                 self.assertEqual(environments[-1]["DISCMON_SMOKE_API_PORT"], str(ports["api"]))
                 self.assertEqual(environments[-1]["DISCMON_SMOKE_WEB_PORT"], str(ports["web"]))
                 self.assertIn("SMOKE CONFIG PASS", stdout.getvalue())
@@ -524,6 +587,8 @@ class ComposeSmokeTests(unittest.TestCase):
              "Unsafe inherited or missing published ports."),
             ("secret bind mount", lambda root: self._add_secret_bind(root),
              "Unexpected service capability, profile, mount or private input."),
+            ("inherited network merge", lambda root: self._remove_network_override_tags(root),
+             "Unexpected network layout."),
             ("malformed YAML", lambda root: (root / "docker-compose.smoke.yml").write_text(
                 "services: [" + SENTINEL + "\n",
             ), "CLI check failed"),
@@ -562,6 +627,24 @@ class ComposeSmokeTests(unittest.TestCase):
         if updated == source:
             raise AssertionError("Smoke overlay port override tags were not found")
         path.write_text(updated)
+
+    @staticmethod
+    def _remove_network_override_tags(root):
+        overlay = root / "docker-compose.smoke.yml"
+        source = overlay.read_text()
+        updated = source.replace("networks: !override", "networks:")
+        if updated == source:
+            raise AssertionError("Smoke overlay network override tags were not found")
+        overlay.write_text(updated)
+
+        base = root / "docker-compose.yml"
+        source = base.read_text()
+        for service in ("postgres", "api", "web"):
+            marker = f"\n  {service}:\n"
+            if source.count(marker) != 1:
+                raise AssertionError(f"Base {service} service was not found exactly once")
+            source = source.replace(marker, marker + "    networks:\n      default: {}\n", 1)
+        base.write_text(source + "\nnetworks:\n  default: {}\n")
 
     @staticmethod
     def _add_secret_bind(root):

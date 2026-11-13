@@ -57,11 +57,11 @@ removes private mounts, unused environment anchors and entire unwanted services.
 python3 scripts/compose_smoke.py --project discmon-smoke-20261113-a17c
 # Alternative non-production bindings (still static only):
 python3 scripts/compose_smoke.py --project discmon-smoke-20261113-b28d \
-  --db-port 56433 --api-port 38001 --web-port 33001
+  --api-port 38001 --web-port 33001
 ```
 
 If needed, use the README's `env -u` wrapper for this static invocation only.
-The validator accepts only the explicit project and three port options, never
+The validator accepts only the explicit project and two API/web port options, never
 arbitrary files, environment files, profiles or a host-check mode. It reuses
 the existing preflight's redacted CLI runner and safety exception without
 changing the production preflight. The subprocess environment contains only a
@@ -82,11 +82,11 @@ Resolved default model:
 | Database route | API uses only `postgres:5432/discmon_smoke_test`; exact test credentials required |
 | Readiness | `pg_isready -U discmon_smoke_user -d discmon_smoke_test` |
 | Web route | `http://api:8000`; test token matches authenticated API |
-| Host ports | PostgreSQL `127.0.0.1:56432`, API `127.0.0.1:38000`, web `127.0.0.1:33000` |
+| Host ports | PostgreSQL: none; API `127.0.0.1:38000`, web `127.0.0.1:33000` |
 | Storage | Only `<project>_pgdata` at `/var/lib/postgresql`; no external/custom storage or host binds |
-| Network | Only `<project>_default`, internal bridge; no external networks or host routing |
+| Networks | `<project>_private` internal bridge (all three); `<project>_ingress` ordinary bridge (API/web only); no external networks |
 | Excluded | Worker, scheduler and changedetection removed, not merely hidden behind profiles |
-| Integrations | No provider credentials/endpoints; Sheets/AI false; ordinary external egress blocked |
+| Integrations | No provider credentials/endpoints; Sheets/AI false; API/web ingress may permit outbound traffic |
 
 The overlay requires an explicit `DISCMON_SMOKE_PROJECT` when used directly;
 only the validator enforces the naming/port/resource policy. Do not invoke raw
@@ -96,8 +96,29 @@ configuration, repository secrets or backup mounts are loaded. API/web have no
 runtime bind mounts, and build contexts are restricted to their existing
 Dockerfiles; **no builds are executed here**.
 
+PostgreSQL has no host publication and attaches exclusively to `private`;
+connections use `postgres:5432` from the API. The API and web attach to both
+networks, with service-network mappings replaced using `!override` so inherited
+networks cannot survive merging. Only their two loopback ports are published.
+The obsolete `--db-port` option is rejected; there is no smoke database host-port
+setting. Top-level networks are also replaced, never external or pre-existing.
+
+**Residual limitation:** the ordinary ingress bridge may permit outbound traffic
+from API/web. This is not complete egress isolation, and disabled integrations
+are not a firewall. PostgreSQL has no ingress attachment or host port, but Docker
+host administrators and authorized private-network peers can still reach it.
+No source ingestion or external provider testing is authorized by this design.
+Docker documents [ordinary bridge egress and port publication](https://docs.docker.com/engine/network/drivers/bridge/)
+and [loopback binding semantics](https://docs.docker.com/engine/network/port-publishing/).
+
+Retry 1 established a healthy PostgreSQL container with a requested host binding
+but `NetworkSettings.Ports["5432/tcp"] = null` and no `docker port` mapping on
+an internal-only bridge. This motivates separating ingress; it does not prove a
+Docker defect or prove the replacement works at runtime. A later drill needs new
+explicit owner authorization, new project identity and fresh safety gates.
+
 Static success is not proof that the proposed volume/network names are unused,
-ports are free, published ports on the internal bridge work on the target
+API/web ports are free, published ports on the ingress bridge work on the target
 engine, or the database/API/web are healthy. No schema is created or migrated.
 The API image does not automatically migrate or seed. API readiness checks
 only `SELECT 1`, not schema compatibility; the web dashboard needs migrated
@@ -130,9 +151,9 @@ This drill is future work, separate from the non-mutating preflight, and
 has not been performed as part of Task 2. It needs separate explicit
 authorization and a pinned commit checked out fresh in a disposable worktree,
 with no production `.env`, secrets or credentials available. Use a disposable
-Compose project, network and database volume, with the reviewed Task 3 base + smoke
-override and validator described above (never the dev overlay). Bind services only to confirmed nonconflicting
-localhost ports.
+Compose project, private/ingress networks and database volume, with the reviewed
+base + smoke override and validator described above (never the dev overlay). Bind
+only to confirmed nonconflicting localhost API/web ports. Do not require or add a PostgreSQL host port.
 
 Wait for PostgreSQL 18 readiness before any separately authorized migration.
 Check the API endpoints directly at `http://127.0.0.1:<api-port>/health/live`

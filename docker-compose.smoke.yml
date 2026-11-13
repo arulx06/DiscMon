@@ -9,8 +9,9 @@ services:
       POSTGRES_USER: discmon_smoke_user
       POSTGRES_PASSWORD: smoke-only-not-a-secret
       POSTGRES_DB: discmon_smoke_test
-    ports: !override
-      - "127.0.0.1:${DISCMON_SMOKE_DB_PORT:-56432}:5432"
+    ports: !reset []
+    networks: !override
+      private:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U discmon_smoke_user -d discmon_smoke_test"]
 
@@ -29,6 +30,9 @@ services:
     ports: !override
       - "127.0.0.1:${DISCMON_SMOKE_API_PORT:-38000}:8000"
     volumes: !reset []
+    networks: !override
+      private:
+      ingress:
 
   web:
     restart: "no"
@@ -38,6 +42,9 @@ services:
       NEXT_PUBLIC_APP_NAME: DiscMon Smoke Test
     ports: !override
       - "127.0.0.1:${DISCMON_SMOKE_WEB_PORT:-33000}:3000"
+    networks: !override
+      private:
+      ingress:
 
   worker: !reset null
   scheduler: !reset null
@@ -46,6 +53,7 @@ services:
 volumes: !override
   pgdata: {}
 
-networks:
-  default:
+networks: !override
+  private:
     internal: true
+  ingress: {}

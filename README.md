@@ -90,14 +90,15 @@ and `!reset` support; unsupported renderers fail closed. The six inherited
 Compose/Docker routing variables listed above must be unset for this static
 invocation. No daemon access or host checks occur.
 
-Only PostgreSQL 18, API and web remain. Default bindings are
-`127.0.0.1:56432`, `127.0.0.1:38000` and `127.0.0.1:33000`; optional
-`--db-port`, `--api-port` and `--web-port` change these without loading shell
-settings. The isolated database is `discmon_smoke_test`. All credentials are
-public **test-only placeholders**, not deployment secrets. There are no bind
-mounts, workers, scheduler or optional integrations; an internal bridge blocks
-ordinary external egress. The old production preflight and Compose files are
-unchanged.
+Only PostgreSQL 18, API and web remain. PostgreSQL has no host port and uses
+only the scoped internal `private` bridge. API/web also join a scoped ordinary
+`ingress` bridge and publish `127.0.0.1:38000` and `127.0.0.1:33000` respectively;
+`--api-port` and `--web-port` select alternatives. The obsolete `--db-port` is
+rejected. Database routing remains `postgres:5432/discmon_smoke_test`.
+Credentials are public **test-only placeholders**, not deployment secrets.
+There are no bind mounts, workers, scheduler or optional integrations.
+**API/web may have outbound connectivity through ingress; this is not complete
+egress isolation.** Production preflight and production Compose are unchanged.
 
 Static validation proves the intended model, **not** resource freshness, free
 ports, effective runtime networking or app health. M0 remains **PARTIAL**.

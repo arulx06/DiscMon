@@ -14,8 +14,8 @@ import compose_preflight as preflight
 Unsafe = preflight.Unsafe
 require = preflight.require
 FILES = ("docker-compose.yml", "docker-compose.smoke.yml")
-DEFAULT_PORTS = {"postgres": 56432, "api": 38000, "web": 33000}
-TARGET_PORTS = {"postgres": 5432, "api": 8000, "web": 3000}
+DEFAULT_PORTS = {"api": 38000, "web": 33000}
+TARGET_PORTS = {"api": 8000, "web": 3000}
 DB_URL = "postgresql+psycopg://discmon_smoke_user:smoke-only-not-a-secret@postgres:5432/discmon_smoke_test"
 
 
@@ -30,7 +30,7 @@ def validate_ports(ports):
     require(set(ports) == set(DEFAULT_PORTS)
             and all(type(port) is int and 1024 <= port <= 65535
                     and port not in {3000, 8000, 55432, 5000} for port in ports.values())
-            and len(set(ports.values())) == 3,
+            and len(set(ports.values())) == 2,
             "Require distinct non-production host ports between 1024 and 65535.")
 
 
@@ -60,15 +60,15 @@ def inspect_config(config, project, ports):
     require(volumes == {"pgdata": {"name": f"{project}_pgdata"}},
             "Unsafe volume: require only fresh project-scoped pgdata, without external/custom storage.")
     networks = config.get("networks", {})
-    require(set(networks) == {"default"}, "Unexpected network layout.")
-    network = networks["default"]
-    require(set(network) <= {"name", "internal", "driver", "ipam"}
-            and network.get("name") == f"{project}_default"
-            and network.get("internal") is True
-            and network.get("driver", "bridge") == "bridge" and not network.get("ipam"),
-            "Unsafe network: require a project-scoped internal bridge without external/custom routing.")
+    require(set(networks) == {"private", "ingress"}, "Unexpected network layout.")
+    for name, network in networks.items():
+        require(set(network) <= {"name", "internal", "driver", "ipam"}
+                and network.get("name") == f"{project}_{name}"
+                and network.get("internal", False) is (name == "private")
+                and network.get("driver", "bridge") == "bridge" and not network.get("ipam"),
+                "Unsafe network: require project-scoped private internal and ordinary ingress bridges.")
     services = config.get("services", {})
-    require(set(services) == set(DEFAULT_PORTS),
+    require(set(services) == {"postgres", "api", "web"},
             "Only postgres, api and web may exist, even with all profiles enabled.")
     common = {"command", "entrypoint", "environment", "networks", "ports", "restart"}
     extras = {"postgres": {"image", "healthcheck", "volumes"},
@@ -80,19 +80,23 @@ def inspect_config(config, project, ports):
                 "Unexpected service capability, profile, mount or private input.")
         require(service.get("restart") == "no" and not service.get("entrypoint"),
                 "Unexpected restart policy or entrypoint.")
-        require(service.get("networks") == {"default": None}, "Unexpected service network routing.")
+        expected_networks = {"private": None} if name == "postgres" else {"private": None, "ingress": None}
+        require(service.get("networks") == expected_networks, "Unexpected service network routing.")
         require(service.get("environment") == expected_env[name],
                 "Unsafe environment or database/API routing; values suppressed.")
         bindings = service.get("ports", [])
-        require(len(bindings) == 1, "Unsafe inherited or missing published ports.")
-        port = bindings[0]
-        require(set(port) <= {"mode", "host_ip", "target", "published", "protocol"}
-                and port.get("host_ip") == "127.0.0.1"
-                and str(port.get("published")) == str(ports[name])
-                and port.get("target") == TARGET_PORTS[name]
-                and port.get("protocol", "tcp") == "tcp"
-                and port.get("mode", "ingress") == "ingress",
-                "Unsafe, public or production host binding.")
+        if name == "postgres":
+            require(bindings == [], "PostgreSQL host ports are forbidden.")
+        else:
+            require(len(bindings) == 1, "Unsafe inherited or missing published ports.")
+            port = bindings[0]
+            require(set(port) <= {"mode", "host_ip", "target", "published", "protocol"}
+                    and port.get("host_ip") == "127.0.0.1"
+                    and str(port.get("published")) == str(ports[name])
+                    and port.get("target") == TARGET_PORTS[name]
+                    and port.get("protocol", "tcp") == "tcp"
+                    and port.get("mode", "ingress") == "ingress",
+                    "Unsafe, public or production host binding.")
         if name == "postgres":
             require(service.get("image") == "postgres:18-alpine" and not service.get("command"),
                     "Require the unmodified PostgreSQL 18 image startup.")
@@ -134,12 +138,12 @@ def inspect_config(config, project, ports):
 
 
 def main(args):
-    usage = "Usage: python3 scripts/compose_smoke.py --project discmon-smoke-<unique-suffix> [--db-port N] [--api-port N] [--web-port N]"
+    usage = "Usage: python3 scripts/compose_smoke.py --project discmon-smoke-<unique-suffix> [--api-port N] [--web-port N]"
     require(len(args) >= 2 and len(args) % 2 == 0 and args[0] == "--project", usage)
     project = args[1]
     validate_project(project)
     ports = DEFAULT_PORTS.copy()
-    options = {"--db-port": "postgres", "--api-port": "api", "--web-port": "web"}
+    options = {"--api-port": "api", "--web-port": "web"}
     seen = set()
     for key, value in zip(args[2::2], args[3::2]):
         require(key in options and key not in seen and re.fullmatch(r"[0-9]{4,5}", value), usage)
@@ -155,7 +159,6 @@ def main(args):
     with tempfile.TemporaryDirectory(prefix="discmon-smoke-") as home:
         env = {"PATH": os.defpath, "HOME": home, "DOCKER_CONFIG": home, "LANG": "C.UTF-8",
                "DISCMON_SMOKE_PROJECT": project,
-               "DISCMON_SMOKE_DB_PORT": str(ports["postgres"]),
                "DISCMON_SMOKE_API_PORT": str(ports["api"]),
                "DISCMON_SMOKE_WEB_PORT": str(ports["web"])}
         version = preflight.call([docker, "compose", "version", "--short"], env).strip()
@@ -177,10 +180,13 @@ def main(args):
         except (ValueError, TypeError, KeyError, AttributeError):
             raise Unsafe("Malformed resolved Compose configuration; contents suppressed.") from None
     print(f"SMOKE CONFIG PASS: {project}; base + smoke override; all profiles inspected.")
-    for name in ("postgres", "api", "web"):
+    print("  postgres: private network only; no host-published ports; restart=no")
+    for name in ("api", "web"):
         print(f"  {name}: 127.0.0.1:{ports[name]}->{TARGET_PORTS[name]}/tcp; restart=no")
     print(f"  volume: {project}_pgdata -> /var/lib/postgresql; no host/secret mounts")
-    print(f"  network: {project}_default (internal bridge); no external resources")
+    print(f"  networks: {project}_private (internal bridge), {project}_ingress (ordinary bridge)")
+    print("  postgres: private only; api/web: private + ingress; no external resources")
+    print("  LIMITATION: ingress may permit outbound traffic; API/web are not egress-isolated")
     print("  DB: postgres:5432/discmon_smoke_test; web API: http://api:8000; credentials hidden")
     print("  worker/scheduler/changedetection absent; external integrations disabled")
     print("STATIC ONLY: no daemon queries or runtime actions; freshness/ports/health NOT established.")
