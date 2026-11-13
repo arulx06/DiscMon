@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-13 — Task 15B correct newly queued discovery reporting
+
+- Correct discovery-specific enqueue reporting with atomic insert/returning:
+  idempotency conflicts now return `None`, not an old completed/dead job ID.
+  Shared enqueue behavior, ingest locking and weekly/monthly cadence keys remain
+  unchanged. No migration, worker or scheduler rewrite.
+- Demonstrated 4 pre-fix failures for weekly/monthly succeeded/dead repeats;
+  added 10 regressions covering terminal/active states, restart, independent
+  sources/next period, concurrent ticks, synchronized insert collision and
+  suppression of misleading discovery activity logs. Original 39 Task 15
+  focused cases are preserved; **49 focused passed** after correction.
+- Full validation and cleanup evidence is recorded in `PROGRESS.md`; final-head
+  backend/web/Compose CI is tracked on existing PR #14. No generated logs,
+  live-provider access, production change, merge or deployment. **M5 PARTIAL**.
+
 ## 2026-11-13 — Task 15 monthly discovery scheduling
 
 - Add explicit `config_json.discovery.cadence="monthly"` without a migration:

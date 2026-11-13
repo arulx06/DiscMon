@@ -1,5 +1,67 @@
 # DiscMon progress
 
+## 2026-11-13 — Task 15B discovery enqueue reporting correction
+
+- Verified handoff baseline `1277036`, open/unmerged PR #14 reviewed head
+  `8993f11`, clean existing isolated Task 15 worktree and matching feature branch.
+  Independent review identified false newly-queued reporting: shared
+  `enqueue_job()` returns an existing ID on conflict, including completed jobs.
+- Regression-first command, exit **1**:
+  `python -m pytest tests/test_discovery_scheduler.py -k terminal -q -s`:
+  **4 failed, 42 deselected in 0.60s** (monthly/weekly × succeeded/dead).
+  In every case the first tick returned `[job_id]`, terminal transition used
+  real queue completion/failure, repeat left exactly one database job but returned
+  `[same_job_id]` rather than `[]`. Failing assertion:
+  `assert repeated["discovery_jobs"] == []` →
+  `AssertionError: assert ['1bf98f81-e64d-4b35-911b-277baddc8309'] == []`
+  (actual pre-fix dead-weekly example).
+- Minimal production correction is confined to `enqueue_discovery_job()`:
+  retain its active-source check, then use PostgreSQL
+  `INSERT ... ON CONFLICT DO NOTHING RETURNING id`. Only the winning insert
+  returns an ID; conflict returns `None`. Shared `enqueue_job()` contract and
+  Task 13 ingest-source locking are unchanged. No scheduler cadence/key changes,
+  migrations, model/API/worker changes or backfills.
+- Added **10 regressions** to the existing scheduler test file. All original
+  39 focused Task 15 cases remain intact. Cover completed/dead weekly/monthly
+  results, restart, independent sources/next period, queued/running/retry-wait,
+  six concurrent scheduler ticks, deterministic two-transaction insert collision
+  and real scheduler-loop output with no repeated discovery-activity tick.
+  Collision barrier forces both enqueuers past their active check before insert:
+  exactly one database job and one non-null return. No queue behavior is mocked.
+- Actual post-fix monthly succeeded example: first
+  `['80404cc4-8033-4bf6-8290-544913be5041']`, same-month repeat `[]`, one DB job.
+  Weekly succeeded: first `['23475237-6a09-4131-8e76-a6776626a1d4']`, repeat `[]`.
+  Monthly dead: first `['e2f98afd-518d-4573-a26a-4da567589365']`, repeat `[]`.
+  Weekly dead: first `['03b9ec88-65c6-443f-b746-3c0afd60af8e']`, repeat `[]`.
+  Restart remains `[]`; another source reports only its new ID; a later eligible
+  December tick reports one new period job for each of two sources.
+- Fresh PostgreSQL **18.7**, cluster **7707701402045521960**, database
+  `discmon_task15b_test`, current/session user `discmon_task15b`, client
+  **127.0.0.1:55436** (resolved loopback), server **172.17.0.2:5432**,
+  server-observed client **172.17.0.1**. Container
+  `discmon-task15b-run_cd9d45abbc9c4d828c7ab7f25de61dd8-pg18` (`b5e52fd55499`), task-labelled named
+  volume `discmon-task15b-run_cd9d45abbc9c4d828c7ab7f25de61dd8-data`; initial Docker inventory empty.
+  Initial attempt raced PostgreSQL startup and could not connect (exit 1);
+  no schema operation connected. Reverified version/cluster/users/endpoints and
+  **zero public tables** after readiness before successful migration to existing
+  `d4a7c1e9f210` (exit 0). No prior database/volume reused.
+- Commands run from `services/api` via task-local `/tmp/discmon-task15b-env.sh`:
+  `env -i`, venv Python 3.12.3, only PATH/HOME and test owner/session settings,
+  `APP_ENV=test`, identical explicit `DATABASE_URL` and `TEST_DATABASE_URL`
+  `postgresql+psycopg://discmon_task15b@127.0.0.1:55436/discmon_task15b_test`.
+  No inherited PG settings/provider credentials, no worktree `.env`, unchanged
+  fail-closed pytest isolation safeguards. Actual post-fix commands/results:
+  - `python -m pytest tests/test_discovery_scheduler.py tests/test_discovery_monthly_review.py -q -s`:
+    **49 passed in 3.62s**, exit **0**.
+  - VALIDATION_PENDING
+  - `python -m ruff check app tests scripts`: **All checks passed!**, exit **0**.
+  - `python -m mypy app scripts`: **61 source files, no issues**, exit **0**.
+  - `git diff --check` (root): clean, exit **0**.
+- Cleanup and final-head CI will be recorded after verification; no generated
+  logs are committed. Offline fixtures only: no live provider, production data,
+  existing backups/volumes, credentials, deployments or scheduler/worker daemons.
+  **M5 remains PARTIAL.** No merge, auto-merge, Task 16 or M6 authorized.
+
 ## 2026-11-13 — Task 15 monthly discovery scheduling and candidate review
 
 - Remote handoff branch verified at required `1277036`; fresh isolated
