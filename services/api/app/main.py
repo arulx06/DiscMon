@@ -12,6 +12,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.integrations import router as integration_router
 from app.api.routes import router
+from app.api.runtime_schedule import host_router as runtime_sync_router
+from app.api.runtime_schedule import owner_router as runtime_schedule_router
 from app.api.webhooks import router as webhook_router
 from app.config import get_settings
 from app.db.session import dispose_engine, engine
@@ -37,11 +39,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 app.include_router(webhook_router)
 app.include_router(integration_router)
+app.include_router(runtime_sync_router)
+app.include_router(runtime_schedule_router)
 app.include_router(router)
 
 
@@ -66,13 +70,21 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    details = [
+        {
+            "loc": error.get("loc", []),
+            "msg": str(error.get("msg", "Invalid value")),
+            "type": str(error.get("type", "value_error")),
+        }
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
         content={
             "code": "validation_error",
             "message": "Request validation failed",
             "request_id": _request_id(request),
-            "details": exc.errors(),
+            "details": details,
         },
     )
 
