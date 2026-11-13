@@ -34,3 +34,5 @@ Thumbs.db
 
 secrets/*
 !secrets/.gitkeep
+
+.runtime.lock

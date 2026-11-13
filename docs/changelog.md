@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-13 — Task 17 Ubuntu daily runtime (not deployed)
+
+- Baseline `8c54d70`, branch `handoff/stabilize-idfc-audit-20261112`.
+  The prior checkpoint-to-baseline diff is exactly 67 files / 11,290 additions /
+  306 deletions; none was introduced or reverted by Task 17.
+- Add a bounded current-time Kolkata reconciler and one service/timer pair for
+  the existing five-container Compose stack. Verify project/file/volume identity,
+  disable container auto-restart, serialize with backups, and stop gracefully
+  without a forced-kill timeout. Never create/remove containers or volumes.
+- Add only a shared lock to the backup script; existing live backup units remain
+  untouched. Failed/unknown/busy backup status fails closed. Missed backups are
+  not replayed and do not cause an overnight restart. Safety can delay shutdown.
+- Offline validation: `python3 -m unittest discover -s scripts/tests -p
+  test_runtime_schedule.py -v`: **25 tests passed**; `python3 -m unittest discover
+  -s scripts/tests`: **63 tests passed**. Ruff, Python compilation, Bash syntax,
+  systemd unit verification, timezone/calendar checks and diff check all exit
+  **0**. Exact outputs: `docs/evidence/task17-runtime-validation.txt`.
+- Installation/verification/rollback and residual limits: `docs/runtime-schedule.md`.
+  No live Docker/systemctl operation, database write/migration, ingestion, service
+  installation/enablement, push, merge or deployment. Application/Compose files
+  unchanged; laptop behavior remains unverified until owner-approved adoption.
+
 ## 2026-11-13 — Task 16 offline Telegram consent and delivery regression
 
 - Reuse existing alert/queue/worker path; recheck owner opt-in at dispatch and

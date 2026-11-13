@@ -1,0 +1,24 @@
+[Unit]
+Description=Reconcile DiscMon daily runtime (Asia/Kolkata)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=arulxamv
+SupplementaryGroups=docker
+WorkingDirectory=/home/arulxamv/projects/DiscMon
+ExecStart=/usr/bin/python3 /home/arulxamv/projects/DiscMon/scripts/runtime_schedule.py
+UMask=0077
+TimeoutStartSec=infinity
+TimeoutStopSec=infinity
+# Keep the Docker client alive until the lock-holding controller finishes.
+KillMode=process
+SendSIGKILL=no
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/arulxamv/projects/DiscMon
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
