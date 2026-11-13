@@ -242,10 +242,15 @@ SMTP and Telegram are optional delivery adapters. The in-app alert inbox is
 always the durable record; missing external configuration leaves alerts
 visible instead of silently discarding them.
 
-## Ubuntu daily operating window (Task 17)
+## Editable Ubuntu operating window (Tasks 17 / 17B)
 
-See [09:00–21:00 Asia/Kolkata runtime scheduling](runtime-schedule.md) for
+See [Settings-driven Asia/Kolkata runtime scheduling](runtime-schedule.md) for
 review-only controller/units, backup locking, owner-approved installation,
 verification and rollback. No live deployment or schedule enablement is claimed.
 Do not use ordinary Compose up/recreate while this schedule is enabled: it can
 restore automatic restart policies and bypass the overnight guard.
+
+Task 17B adds revisioned Settings persistence, a dedicated authenticated host pull,
+and a private offline snapshot. Existing 20:30 backup units are unchanged; earlier
+shutdowns are rejected pending an approved backup migration. See the runtime
+runbook for token provisioning, migration/adoption prerequisites and rollback.
